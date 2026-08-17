@@ -12,6 +12,7 @@ import { apiErrorMessage, MOCK_API, API_BASE_URL } from '../../src/api/client';
 import { useAuthStore } from '../../src/auth/store';
 import { safeResolveNext } from '../../src/auth/next';
 import { reconcileCartForUser } from '../../src/stores/cart';
+import { reconcileReceiptDraftForUser } from '../../src/stores/receipt-draft';
 
 const schema = z.object({
   username: z.string().trim().min(3, 'Tên đăng nhập tối thiểu 3 ký tự'),
@@ -39,6 +40,7 @@ export default function Login() {
     onSuccess: async (data) => {
       await setSession({ token: data.accessToken, user: data.user });
       reconcileCartForUser(data.user.id);
+      reconcileReceiptDraftForUser(data.user.id);
       const target = safeResolveNext(nextParam) ?? '/';
       router.replace(target as never);
     },

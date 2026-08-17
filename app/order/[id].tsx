@@ -1,14 +1,5 @@
 import { useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  ActivityIndicator,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-} from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -24,7 +15,7 @@ import { StatusChip } from '../../src/features/orders/components/StatusChip';
 import { StatusTimeline } from '../../src/features/orders/components/StatusTimeline';
 import { LineRow } from '../../src/features/orders/components/LineRow';
 import { Button } from '../../src/components/Button';
-import { Input } from '../../src/components/Input';
+import { CancelSheet } from '../../src/components/CancelSheet';
 
 export default function OrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -41,7 +32,6 @@ export default function OrderDetail() {
   const [pendingTransition, setPendingTransition] = useState<
     { to: OrderStatus; label: string; requiresReason?: boolean } | null
   >(null);
-  const [reason, setReason] = useState('');
 
   const statusMutation = useMutation({
     mutationFn: (body: { status: OrderStatus; reason?: string }) =>
@@ -50,7 +40,6 @@ export default function OrderDetail() {
       qc.setQueryData(['order', orderId], updated);
       qc.invalidateQueries({ queryKey: ['orders'] });
       setPendingTransition(null);
-      setReason('');
     },
   });
 
@@ -192,7 +181,6 @@ export default function OrderDetail() {
                   statusMutation.reset();
                   if (t.requiresReason) {
                     setPendingTransition({ to: t.to, label: t.label, requiresReason: true });
-                    setReason('');
                   } else {
                     statusMutation.mutate({ status: t.to });
                   }
@@ -203,72 +191,23 @@ export default function OrderDetail() {
         </View>
       ) : null}
 
-      <Modal
+      <CancelSheet
         visible={pendingTransition?.requiresReason === true}
-        transparent
-        statusBarTranslucent
-        animationType="slide"
-        onRequestClose={() => {
+        title={pendingTransition?.label ?? ''}
+        submitting={statusMutation.isPending}
+        errorMessage={statusMutation.isError ? apiErrorMessage(statusMutation.error) : null}
+        onDismiss={() => {
           setPendingTransition(null);
           statusMutation.reset();
         }}
-      >
-        <KeyboardAvoidingView
-          className="flex-1 justify-end bg-black/40"
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View className="bg-white rounded-t-frame p-4 pb-6">
-            <View className="items-center mb-2">
-              <View className="h-1 w-12 bg-neutral-300 rounded-full" />
-            </View>
-            <Text className="text-h2 text-ink mb-2">{pendingTransition?.label}</Text>
-            <Text className="text-caption text-ink-muted mb-3">
-              Vui lòng nhập lý do trước khi tiếp tục.
-            </Text>
-            <Input
-              label="Lý do"
-              placeholder="Ví dụ: Khách đổi ý"
-              value={reason}
-              onChangeText={setReason}
-              multiline
-              numberOfLines={3}
-              autoFocus
-            />
-            {statusMutation.isError ? (
-              <Text className="text-small text-red-600 mb-2">
-                {apiErrorMessage(statusMutation.error)}
-              </Text>
-            ) : null}
-            <View className="flex-row gap-2 mt-2">
-              <View className="flex-1">
-                <Pressable
-                  onPress={() => {
-                    setPendingTransition(null);
-                    statusMutation.reset();
-                  }}
-                  className="h-button rounded-card border border-border items-center justify-center"
-                >
-                  <Text className="text-ink font-semibold">Huỷ bỏ</Text>
-                </Pressable>
-              </View>
-              <View className="flex-1">
-                <Button
-                  label="Xác nhận"
-                  loading={statusMutation.isPending}
-                  disabled={reason.trim().length < 3}
-                  onPress={() =>
-                    pendingTransition &&
-                    statusMutation.mutate({
-                      status: pendingTransition.to,
-                      reason: reason.trim(),
-                    })
-                  }
-                />
-              </View>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        onSubmit={(reasonText) =>
+          pendingTransition &&
+          statusMutation.mutate({
+            status: pendingTransition.to,
+            reason: reasonText,
+          })
+        }
+      />
     </SafeAreaView>
   );
 }

@@ -17,13 +17,27 @@ const SHORTCUTS: Shortcut[] = [
   { key: 'scan', title: 'Quét tem QR', icon: 'scan-outline', color: '#dd1c2e', href: '/scan' },
   { key: 'orders', title: 'Đơn hàng', icon: 'receipt-outline', color: '#0ea5e9', href: '/orders' },
   {
+    key: 'vat-tu-nhap',
+    title: 'Nhập kho vật tư',
+    icon: 'download-outline',
+    color: '#16a34a',
+    href: '/vat-tu?action=nhap',
+  },
+  {
+    key: 'vat-tu-ban',
+    title: 'Bán / Xuất vật tư',
+    icon: 'arrow-up-circle-outline',
+    color: '#d97706',
+    href: '/vat-tu?action=ban',
+  },
+  {
     key: 'inbox',
     title: 'Chat / Inbox',
     icon: 'chatbubble-ellipses-outline',
     color: '#8b5cf6',
     comingSoon: true,
   },
-  { key: 'vision', title: 'Nhận diện ảnh', icon: 'camera-outline', color: '#16a34a', comingSoon: true },
+  { key: 'vision', title: 'Nhận diện ảnh', icon: 'camera-outline', color: '#8b5cf6', comingSoon: true },
 ];
 
 export default function Home() {

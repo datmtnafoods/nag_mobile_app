@@ -6,6 +6,7 @@ import { logout } from '../../src/api/erp/auth';
 import { Button } from '../../src/components/Button';
 import { API_BASE_URL, MOCK_API } from '../../src/api/client';
 import { useCartStore, CART_STORAGE_KEY } from '../../src/stores/cart';
+import { useReceiptDraftStore, RECEIPT_DRAFT_KEY } from '../../src/stores/receipt-draft';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -24,7 +25,11 @@ export default function Profile() {
           await logout();
           await clearSession();
           useCartStore.getState().reset();
-          await AsyncStorage.removeItem(CART_STORAGE_KEY);
+          useReceiptDraftStore.getState().reset();
+          await Promise.all([
+            AsyncStorage.removeItem(CART_STORAGE_KEY),
+            AsyncStorage.removeItem(RECEIPT_DRAFT_KEY),
+          ]);
           qc.clear();
         },
       },

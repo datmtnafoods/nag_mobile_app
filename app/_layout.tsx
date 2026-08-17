@@ -46,6 +46,7 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen name="order" />
+          <Stack.Screen name="vat-tu" />
         </Stack>
       </SafeAreaProvider>
     </QueryClientProvider>
