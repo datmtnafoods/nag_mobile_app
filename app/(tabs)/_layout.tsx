@@ -20,6 +20,7 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Trang chủ',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
         }}
       />
@@ -27,8 +28,19 @@ export default function TabsLayout() {
         name="scan"
         options={{
           title: 'Quét tem',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="scan-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="orders"
+        options={{
+          title: 'Đơn hàng',
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="receipt-outline" size={size} color={color} />
           ),
         }}
       />
@@ -36,6 +48,7 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: 'Cá nhân',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-circle-outline" size={size} color={color} />
           ),

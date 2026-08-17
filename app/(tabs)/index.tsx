@@ -15,7 +15,7 @@ type Shortcut = {
 
 const SHORTCUTS: Shortcut[] = [
   { key: 'scan', title: 'Quét tem QR', icon: 'scan-outline', color: '#dd1c2e', href: '/scan' },
-  { key: 'orders', title: 'Đơn hàng', icon: 'receipt-outline', color: '#0ea5e9', comingSoon: true },
+  { key: 'orders', title: 'Đơn hàng', icon: 'receipt-outline', color: '#0ea5e9', href: '/orders' },
   {
     key: 'inbox',
     title: 'Chat / Inbox',
