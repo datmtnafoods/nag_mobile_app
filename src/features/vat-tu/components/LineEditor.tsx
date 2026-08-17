@@ -6,12 +6,11 @@ import { formatVND } from '../format';
 
 type Props = {
   line: DraftLine;
-  onEdit: () => void;
   onRemove: () => void;
   warning?: string | null;
 };
 
-export function LineEditor({ line, onEdit, onRemove, warning }: Props) {
+export function LineEditor({ line, onRemove, warning }: Props) {
   const { primary, caption } = formatQtyWithUnit(line.soLuong, line.donVi, {
     donViCoBan: line.donViCoBan,
     donViLon: line.donViLon,
@@ -55,14 +54,15 @@ export function LineEditor({ line, onEdit, onRemove, warning }: Props) {
             </View>
           ) : null}
         </View>
-        <View className="flex-row items-center">
-          <Pressable onPress={onEdit} hitSlop={8} className="p-2" accessibilityLabel="Sửa dòng">
-            <Ionicons name="create-outline" size={20} color="#6b7280" />
-          </Pressable>
-          <Pressable onPress={onRemove} hitSlop={8} className="p-2" accessibilityLabel="Xoá dòng">
-            <Ionicons name="trash-outline" size={20} color="#b91c1c" />
-          </Pressable>
-        </View>
+        <Pressable
+          onPress={onRemove}
+          hitSlop={8}
+          className="p-2"
+          accessibilityRole="button"
+          accessibilityLabel="Xoá dòng"
+        >
+          <Ionicons name="trash-outline" size={20} color="#b91c1c" />
+        </Pressable>
       </View>
     </View>
   );

@@ -90,6 +90,7 @@ export const useCartStore = create<CartState>()(
 
       reset: () =>
         set({
+          ownerUserId: undefined,
           lines: [],
           customer: undefined,
           delivery: undefined,

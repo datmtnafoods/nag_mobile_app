@@ -31,7 +31,6 @@ export default function PartnerPicker() {
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [manualName, setManualName] = useState('');
-  const [manualPhone, setManualPhone] = useState('');
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
@@ -165,14 +164,6 @@ export default function PartnerPicker() {
               leftIcon={isNCC ? 'business-outline' : 'person-outline'}
               value={manualName}
               onChangeText={setManualName}
-            />
-            <Input
-              label="Số điện thoại (không bắt buộc)"
-              placeholder="0912345678"
-              leftIcon="call-outline"
-              keyboardType="phone-pad"
-              value={manualPhone}
-              onChangeText={setManualPhone}
             />
           </View>
           <View className="px-4 pb-4 pt-2 border-t border-border bg-bg">

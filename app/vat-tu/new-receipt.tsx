@@ -137,7 +137,21 @@ export default function NewReceipt() {
     },
   });
 
-  const canSubmit = Boolean(khoId) && lines.length > 0 && (kindParam === 'nhap' ? Boolean(partner) : true);
+  const hasOverstockWarnings = Object.keys(overstockWarnings).length > 0;
+  const stockChecking =
+    kindParam === 'ban' &&
+    Boolean(khoId) &&
+    lines.length > 0 &&
+    (stockQuery.isPending || stockQuery.isFetching);
+
+  // Yêu cầu partner cho CẢ nhap và ban — nếu ban restart mà partner mất,
+  // user phải chọn lại (chống silent "Khách lẻ" fallback).
+  const canSubmit =
+    Boolean(khoId) &&
+    lines.length > 0 &&
+    Boolean(partner) &&
+    !stockChecking &&
+    !hasOverstockWarnings;
 
   if (!canCreateReceipt(perms, kindParam)) {
     return (
@@ -176,7 +190,7 @@ export default function NewReceipt() {
             ) : null,
         }}
       />
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
           keyboardShouldPersistTaps="handled"
@@ -194,6 +208,9 @@ export default function NewReceipt() {
                     <View key={k.id} className="px-1 pb-2">
                       <Pressable
                         onPress={() => setKho(k.id)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        accessibilityLabel={`Kho ${k.ten}${active ? ', đã chọn' : ''}`}
                         className={`h-10 px-3 rounded-input flex-row items-center border ${
                           active ? 'bg-primary border-primary' : 'bg-white border-border'
                         }`}
@@ -261,9 +278,12 @@ export default function NewReceipt() {
               <Text className="text-caption text-ink-muted uppercase">3 · Dòng hàng</Text>
               <View className="flex-row gap-3">
                 <Pressable
-                  onPress={() =>
-                    router.push('/vat-tu/scan-code?returnTo=/vat-tu/new-receipt' as never)
-                  }
+                  onPress={() => {
+                    const returnTo = `/vat-tu/new-receipt?kind=${kindParam}`;
+                    router.push(
+                      `/vat-tu/scan-code?returnTo=${encodeURIComponent(returnTo)}` as never,
+                    );
+                  }}
                   className="flex-row items-center"
                   hitSlop={8}
                 >
@@ -291,7 +311,6 @@ export default function NewReceipt() {
                 <LineEditor
                   key={`${line.vatTuId}-${line.lo ?? ''}-${idx}`}
                   line={line}
-                  onEdit={() => router.push('/vat-tu/sku-picker' as never)}
                   onRemove={() => {
                     Alert.alert(
                       'Xoá dòng?',
@@ -343,11 +362,16 @@ export default function NewReceipt() {
 
         <View className="px-4 pb-4 pt-2 border-t border-border bg-bg">
           <Button
-            label={meta.cta}
+            label={stockChecking ? 'Đang kiểm tra tồn...' : meta.cta}
             disabled={!canSubmit || createMut.isPending}
-            loading={createMut.isPending}
+            loading={createMut.isPending || stockChecking}
             onPress={() => createMut.mutate()}
           />
+          {kindParam === 'ban' && hasOverstockWarnings ? (
+            <Text className="text-small text-amber-700 mt-1 text-center">
+              Có dòng vượt tồn — sửa số lượng hoặc đổi kho trước khi gửi.
+            </Text>
+          ) : null}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

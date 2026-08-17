@@ -6,6 +6,7 @@ import {
   View,
   Text,
   Pressable,
+  ScrollView,
 } from 'react-native';
 import { Button } from './Button';
 import { Input } from './Input';
@@ -59,45 +60,50 @@ export function CancelSheet({
     >
       <KeyboardAvoidingView
         className="flex-1 justify-end bg-black/40"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View className="bg-white rounded-t-frame p-4 pb-6">
-          <View className="items-center mb-2">
-            <View className="h-1 w-12 bg-neutral-300 rounded-full" />
-          </View>
-          <Text className="text-h2 text-ink mb-2">{title}</Text>
-          <Text className="text-caption text-ink-muted mb-3">{helperText}</Text>
-          <Input
-            label="Lý do"
-            placeholder={placeholder}
-            value={reason}
-            onChangeText={setReason}
-            multiline
-            numberOfLines={3}
-            autoFocus={visible}
-          />
-          {errorMessage ? (
-            <Text className="text-small text-red-600 mb-2">{errorMessage}</Text>
-          ) : null}
-          <View className="flex-row gap-2 mt-2">
-            <View className="flex-1">
-              <Pressable
-                onPress={onDismiss}
-                className="h-button rounded-card border border-border items-center justify-center"
-              >
-                <Text className="text-ink font-semibold">{dismissLabel}</Text>
-              </Pressable>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View className="bg-white rounded-t-frame p-4 pb-6">
+            <View className="items-center mb-2">
+              <View className="h-1 w-12 bg-neutral-300 rounded-full" />
             </View>
-            <View className="flex-1">
-              <Button
-                label={submitLabel}
-                loading={submitting}
-                disabled={disabled}
-                onPress={() => onSubmit(reason.trim())}
-              />
+            <Text className="text-h2 text-ink mb-2">{title}</Text>
+            <Text className="text-caption text-ink-muted mb-3">{helperText}</Text>
+            <Input
+              label="Lý do"
+              placeholder={placeholder}
+              value={reason}
+              onChangeText={setReason}
+              multiline
+              numberOfLines={3}
+            />
+            {errorMessage ? (
+              <Text className="text-small text-red-600 mb-2">{errorMessage}</Text>
+            ) : null}
+            <View className="flex-row gap-2 mt-2">
+              <View className="flex-1">
+                <Pressable
+                  onPress={onDismiss}
+                  className="h-button rounded-card border border-border items-center justify-center"
+                >
+                  <Text className="text-ink font-semibold">{dismissLabel}</Text>
+                </Pressable>
+              </View>
+              <View className="flex-1">
+                <Button
+                  label={submitLabel}
+                  loading={submitting}
+                  disabled={disabled}
+                  onPress={() => onSubmit(reason.trim())}
+                />
+              </View>
             </View>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
   );

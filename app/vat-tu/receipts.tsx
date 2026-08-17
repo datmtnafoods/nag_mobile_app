@@ -132,6 +132,13 @@ export default function ReceiptsList() {
                 setKind('all');
                 setStatus('all');
               }}
+              onCreate={() => {
+                if (kind === 'nhap' || kind === 'ban') {
+                  router.push(`/vat-tu/new-receipt?kind=${kind}` as never);
+                } else {
+                  router.push('/vat-tu' as never);
+                }
+              }}
             />
           }
           refreshControl={

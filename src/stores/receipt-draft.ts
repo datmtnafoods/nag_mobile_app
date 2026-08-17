@@ -69,7 +69,14 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
                 ? newBase / existing.heSoQuyDoi
                 : newBase;
             const next = [...s.lines];
-            next[idx] = { ...existing, soLuong: Math.round(newQty * 1000) / 1000 };
+            next[idx] = {
+              ...existing,
+              soLuong: Math.round(newQty * 1000) / 1000,
+              // Ưu tiên giá/lô/hạn mới nhất user vừa nhập (last-write-wins)
+              donGia: line.donGia ?? existing.donGia,
+              hanDung: line.hanDung ?? existing.hanDung,
+              serial: line.serial ?? existing.serial,
+            };
             return { lines: next };
           }
           return { lines: [...s.lines, line] };
@@ -97,6 +104,7 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
 
       reset: () =>
         set({
+          ownerUserId: undefined,
           kind: null,
           khoId: undefined,
           partner: undefined,

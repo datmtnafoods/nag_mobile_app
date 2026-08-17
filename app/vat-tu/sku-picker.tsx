@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Stack } from 'expo-router';
@@ -44,6 +45,23 @@ export default function SkuPicker() {
     enabled: !picked,
     staleTime: 30_000,
   });
+
+  const backToList = useCallback(() => {
+    setPicked(null);
+    setUnit('co_ban');
+    setQty(1);
+    setLo('');
+  }, []);
+
+  // Android hardware back: khi đã pick SKU → quay lại list thay vì đóng picker.
+  useEffect(() => {
+    if (!picked) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      backToList();
+      return true;
+    });
+    return () => sub.remove();
+  }, [picked, backToList]);
 
   const canAdd = useMemo(() => Boolean(picked) && qty > 0, [picked, qty]);
 
@@ -132,14 +150,23 @@ export default function SkuPicker() {
 
   return (
     <SafeAreaView className="flex-1 bg-bg-soft" edges={['bottom']}>
-      <Stack.Screen options={{ title: picked.ten }} />
+      <Stack.Screen
+        options={{
+          title: picked.ten,
+          headerLeft: () => (
+            <Pressable onPress={backToList} hitSlop={12} style={{ paddingHorizontal: 4 }}>
+              <Ionicons name="chevron-back" size={26} color="#111827" />
+            </Pressable>
+          ),
+        }}
+      />
       <KeyboardAvoidingView
         className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <ScrollView contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
           <Pressable
-            onPress={() => setPicked(null)}
+            onPress={backToList}
             className="flex-row items-center pb-2"
             hitSlop={4}
           >

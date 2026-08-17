@@ -43,7 +43,9 @@ export default function ScanCode() {
             donVi: 'co_ban',
             donGia: sku.giaBan,
           });
-          router.replace(target as never);
+          // Prefer pop scan-code (giữ instance new-receipt gốc + kindParam).
+          if (router.canGoBack()) router.back();
+          else router.replace(target as never);
         })
         .catch((err: Error & { code?: string }) => {
           const isNotFound = err.code === 'ma_not_found';
