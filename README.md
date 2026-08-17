@@ -22,7 +22,16 @@ npm run start
 
 Terminal hiện QR code. Trên iPhone: mở **Camera** → hướng vào QR → tap notification "Open in Expo Go". Trên Android: mở **Expo Go** → tab **Scan** → quét QR.
 
-Điện thoại phải cùng WiFi với máy dev. Khác mạng (VD điện thoại dùng 4G) thì chạy `npx expo start --tunnel`.
+Điện thoại phải cùng WiFi với máy dev.
+
+**Khác mạng (VD điện thoại 4G)** — dùng tunnel:
+
+```bash
+npm run tunnel
+```
+
+Cần `@expo/ngrok` (đã cài sẵn ở devDependencies). Lần đầu chạy sẽ mất thêm ~30s để mở tunnel. QR code tunnel `exp://xxxx.tunnel.expo.dev` — quét như bình thường.
+Bundle load qua tunnel chậm hơn LAN (~1 phút cho lần đầu), Fast Refresh vẫn nhanh.
 
 ## Cấu trúc
 
