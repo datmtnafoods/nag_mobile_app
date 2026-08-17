@@ -1,5 +1,6 @@
-import { Pressable, Text, ActivityIndicator, View } from 'react-native';
-import type { PressableProps } from 'react-native';
+import { useCallback, useRef } from 'react';
+import { Pressable, Text, ActivityIndicator } from 'react-native';
+import type { PressableProps, GestureResponderEvent } from 'react-native';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
 
@@ -27,20 +28,36 @@ const variants: Record<Variant, { container: string; text: string }> = {
   },
 };
 
+const DOUBLE_TAP_MS = 500;
+
 export function Button({
   label,
   variant = 'primary',
   loading = false,
   fullWidth = true,
   disabled,
+  onPress,
   ...rest
 }: Props) {
   const v = variants[variant];
   const isDisabled = disabled || loading;
+  const lastPressRef = useRef(0);
+
+  const guardedPress = useCallback(
+    (e: GestureResponderEvent) => {
+      const now = Date.now();
+      if (now - lastPressRef.current < DOUBLE_TAP_MS) return;
+      lastPressRef.current = now;
+      onPress?.(e);
+    },
+    [onPress],
+  );
+
   return (
     <Pressable
       accessibilityRole="button"
       disabled={isDisabled}
+      onPress={isDisabled ? undefined : guardedPress}
       className={`${base} ${v.container} ${fullWidth ? 'w-full' : ''} ${isDisabled ? 'opacity-60' : ''}`}
       {...rest}
     >

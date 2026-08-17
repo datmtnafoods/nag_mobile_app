@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import { View, Text, ScrollView, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -9,18 +9,34 @@ type Shortcut = {
   title: string;
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
-  href: string;
+  href?: string;
+  comingSoon?: boolean;
 };
 
 const SHORTCUTS: Shortcut[] = [
   { key: 'scan', title: 'Quét tem QR', icon: 'scan-outline', color: '#dd1c2e', href: '/scan' },
-  { key: 'orders', title: 'Đơn hàng', icon: 'receipt-outline', color: '#0ea5e9', href: '/(tabs)/' },
-  { key: 'inbox', title: 'Chat / Inbox', icon: 'chatbubble-ellipses-outline', color: '#8b5cf6', href: '/(tabs)/' },
-  { key: 'vision', title: 'Nhận diện ảnh', icon: 'camera-outline', color: '#16a34a', href: '/(tabs)/' },
+  { key: 'orders', title: 'Đơn hàng', icon: 'receipt-outline', color: '#0ea5e9', comingSoon: true },
+  {
+    key: 'inbox',
+    title: 'Chat / Inbox',
+    icon: 'chatbubble-ellipses-outline',
+    color: '#8b5cf6',
+    comingSoon: true,
+  },
+  { key: 'vision', title: 'Nhận diện ảnh', icon: 'camera-outline', color: '#16a34a', comingSoon: true },
 ];
 
 export default function Home() {
   const user = useCurrentUser();
+
+  const onShortcut = (s: Shortcut) => {
+    if (s.comingSoon || !s.href) {
+      Alert.alert('Sắp ra mắt', 'Chức năng này đang được phát triển ở các phase tiếp theo.');
+      return;
+    }
+    router.push(s.href as never);
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-bg-soft" edges={['top']}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
@@ -47,8 +63,10 @@ export default function Home() {
           {SHORTCUTS.map((s) => (
             <View key={s.key} className="w-1/2 px-1 mb-2">
               <Pressable
-                onPress={() => router.push(s.href as never)}
-                className="rounded-card bg-white border border-border p-4 items-start active:bg-bg-soft"
+                onPress={() => onShortcut(s)}
+                className={`rounded-card bg-white border border-border p-4 items-start active:bg-bg-soft ${
+                  s.comingSoon ? 'opacity-70' : ''
+                }`}
               >
                 <View
                   className="h-10 w-10 rounded-input items-center justify-center mb-2"
@@ -56,7 +74,14 @@ export default function Home() {
                 >
                   <Ionicons name={s.icon} size={22} color={s.color} />
                 </View>
-                <Text className="text-body text-ink font-semibold">{s.title}</Text>
+                <View className="flex-row items-center">
+                  <Text className="text-body text-ink font-semibold">{s.title}</Text>
+                  {s.comingSoon ? (
+                    <View className="ml-2 rounded-input bg-amber-100 px-2 py-0.5">
+                      <Text className="text-small text-amber-800">Sắp có</Text>
+                    </View>
+                  ) : null}
+                </View>
               </Pressable>
             </View>
           ))}

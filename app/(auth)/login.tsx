@@ -4,11 +4,13 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation } from '@tanstack/react-query';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Button } from '../../src/components/Button';
 import { Input } from '../../src/components/Input';
 import { login } from '../../src/api/erp/auth';
 import { apiErrorMessage, MOCK_API, API_BASE_URL } from '../../src/api/client';
 import { useAuthStore } from '../../src/auth/store';
+import { safeResolveNext } from '../../src/auth/next';
 
 const schema = z.object({
   username: z.string().trim().min(3, 'Tên đăng nhập tối thiểu 3 ký tự'),
@@ -19,6 +21,9 @@ type FormValues = z.infer<typeof schema>;
 
 export default function Login() {
   const setSession = useAuthStore((s) => s.setSession);
+  const params = useLocalSearchParams<{ next?: string }>();
+  const nextParam = typeof params.next === 'string' ? params.next : undefined;
+
   const {
     control,
     handleSubmit,
@@ -32,6 +37,8 @@ export default function Login() {
     mutationFn: login,
     onSuccess: async (data) => {
       await setSession({ token: data.accessToken, user: data.user });
+      const target = safeResolveNext(nextParam) ?? '/';
+      router.replace(target as never);
     },
   });
 
@@ -41,7 +48,7 @@ export default function Login() {
     <SafeAreaView className="flex-1 bg-bg" edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
           className="flex-1"
@@ -55,6 +62,14 @@ export default function Login() {
             <Text className="text-h1 text-ink">NaGreen</Text>
             <Text className="text-caption text-ink-muted mt-1">Đăng nhập nội bộ Nafoods</Text>
           </View>
+
+          {nextParam ? (
+            <View className="rounded-input bg-primary-50 border border-primary/20 p-3 mb-3 flex-row items-start">
+              <Text className="text-caption text-primary-700">
+                Đăng nhập để tiếp tục thao tác trước đó.
+              </Text>
+            </View>
+          ) : null}
 
           <Controller
             control={control}

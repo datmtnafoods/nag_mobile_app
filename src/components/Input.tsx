@@ -11,30 +11,40 @@ type Props = TextInputProps & {
 };
 
 export const Input = forwardRef<TextInput, Props>(function Input(
-  { label, error, secure, leftIcon, className, ...rest },
+  { label, error, secure, leftIcon, className: _className, multiline, ...rest },
   ref,
 ) {
   const [hidden, setHidden] = useState(!!secure);
   const invalid = Boolean(error);
+  const isMultiline = Boolean(multiline);
+
   return (
     <View className="mb-3">
       {label ? <Text className="text-caption text-ink-muted mb-1">{label}</Text> : null}
       <View
-        className={`h-input flex-row items-center rounded-input border px-3 bg-white ${
-          invalid ? 'border-red-500' : 'border-border'
-        }`}
+        className={`flex-row rounded-input border px-3 bg-white ${
+          isMultiline ? 'py-2 items-start' : 'h-input items-center'
+        } ${invalid ? 'border-red-500' : 'border-border'}`}
+        style={isMultiline ? { minHeight: 96 } : undefined}
       >
         {leftIcon ? (
-          <Ionicons name={leftIcon} size={18} color="#9ca3af" style={{ marginRight: 8 }} />
+          <Ionicons
+            name={leftIcon}
+            size={18}
+            color="#9ca3af"
+            style={{ marginRight: 8, marginTop: isMultiline ? 4 : 0 }}
+          />
         ) : null}
         <TextInput
           ref={ref}
           className="flex-1 text-body text-ink"
           placeholderTextColor="#9ca3af"
-          secureTextEntry={hidden}
-          autoCapitalize={secure ? 'none' : rest.autoCapitalize}
           autoCorrect={false}
+          multiline={isMultiline}
+          textAlignVertical={isMultiline ? 'top' : 'auto'}
           {...rest}
+          secureTextEntry={secure ? hidden : rest.secureTextEntry}
+          autoCapitalize={secure ? 'none' : rest.autoCapitalize}
         />
         {secure ? (
           <Pressable

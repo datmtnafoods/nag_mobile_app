@@ -10,7 +10,15 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "vn.nafoods.nagreen"
+      "bundleIdentifier": "vn.nafoods.nagreen",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "package": "vn.nafoods.nagreen",
@@ -28,7 +36,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "NaGreen cần dùng camera để quét tem QR kích hoạt giống."
+        }
+      ]
     ]
   }
 }

@@ -34,6 +34,17 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="activation"
+            options={{
+              headerShown: true,
+              title: 'Kích hoạt tem',
+              headerStyle: { backgroundColor: '#ffffff' },
+              headerTintColor: '#111827',
+              headerTitleStyle: { fontWeight: '600' },
+              presentation: 'modal',
+            }}
+          />
         </Stack>
       </SafeAreaProvider>
     </QueryClientProvider>
