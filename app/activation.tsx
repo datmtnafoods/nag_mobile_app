@@ -1,8 +1,7 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
-  Pressable,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -17,6 +16,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../src/components/Button';
 import { Input } from '../src/components/Input';
+import { HeaderCloseButton, useCloseHandler } from '../src/components/HeaderCloseButton';
 import { getBatchInfo, activate } from '../src/api/erp/activation';
 import { apiErrorMessage } from '../src/api/client';
 import { useIsAuthenticated } from '../src/auth/store';
@@ -43,27 +43,6 @@ function buildLoginRedirectHref(params: { code: string; sr: string; t?: string }
   }).toString();
   const next = `/activation?${qs}`;
   return `/(auth)/login?next=${encodeURIComponent(next)}`;
-}
-
-function useCloseHandler() {
-  return useCallback(() => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/' as never);
-  }, []);
-}
-
-function HeaderCloseButton({ onPress }: { onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      hitSlop={12}
-      accessibilityRole="button"
-      accessibilityLabel="Đóng"
-      style={{ paddingHorizontal: 4 }}
-    >
-      <Ionicons name="close" size={26} color="#111827" />
-    </Pressable>
-  );
 }
 
 export default function Activation() {
