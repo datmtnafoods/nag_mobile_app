@@ -5,10 +5,14 @@ import { useAuthStore, useCurrentUser } from '../../src/auth/store';
 import { logout } from '../../src/api/erp/auth';
 import { Button } from '../../src/components/Button';
 import { API_BASE_URL, MOCK_API } from '../../src/api/client';
+import { useCartStore, CART_STORAGE_KEY } from '../../src/stores/cart';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function Profile() {
   const user = useCurrentUser();
   const clearSession = useAuthStore((s) => s.clearSession);
+  const qc = useQueryClient();
 
   const onLogout = () => {
     Alert.alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
@@ -19,6 +23,9 @@ export default function Profile() {
         onPress: async () => {
           await logout();
           await clearSession();
+          useCartStore.getState().reset();
+          await AsyncStorage.removeItem(CART_STORAGE_KEY);
+          qc.clear();
         },
       },
     ]);

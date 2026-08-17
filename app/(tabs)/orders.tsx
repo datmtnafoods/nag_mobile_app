@@ -11,23 +11,20 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { listOrders } from '../../src/api/erp/orders';
 import { OrderCard } from '../../src/features/orders/components/OrderCard';
 import { EmptyOrders } from '../../src/features/orders/components/EmptyOrders';
 import { apiErrorMessage } from '../../src/api/client';
 import type { OrderStatus } from '../../src/features/orders/types';
 import { STATUS_META } from '../../src/features/orders/format';
+import { STATUS_ORDER } from '../../src/features/orders/fsm';
 
 type FilterKey = 'all' | OrderStatus;
 
 const FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: 'all', label: 'Tất cả' },
-  { key: 'draft', label: STATUS_META.draft.label },
-  { key: 'new', label: STATUS_META.new.label },
-  { key: 'confirmed', label: STATUS_META.confirmed.label },
-  { key: 'delivering', label: STATUS_META.delivering.label },
-  { key: 'completed', label: STATUS_META.completed.label },
+  ...STATUS_ORDER.map((s) => ({ key: s, label: STATUS_META[s].label })),
   { key: 'cancelled', label: STATUS_META.cancelled.label },
 ];
 
@@ -39,6 +36,7 @@ export default function OrdersTab() {
     queryFn: () =>
       listOrders({ status: filter === 'all' ? undefined : filter, page: 1, pageSize: 50 }),
     staleTime: 0,
+    placeholderData: keepPreviousData,
   });
 
   const onRefresh = useCallback(() => {
@@ -65,6 +63,9 @@ export default function OrdersTab() {
               <Pressable
                 key={f.key}
                 onPress={() => setFilter(f.key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`Lọc ${f.label}`}
                 className={`h-9 px-3 rounded-input flex-row items-center border ${
                   active ? 'bg-primary border-primary' : 'bg-white border-border'
                 }`}
@@ -80,7 +81,7 @@ export default function OrdersTab() {
         </ScrollView>
       </View>
 
-      {ordersQuery.isPending ? (
+      {ordersQuery.isPending && !ordersQuery.data ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#dd1c2e" />
         </View>
@@ -102,12 +103,17 @@ export default function OrdersTab() {
           data={ordersQuery.data?.data ?? []}
           keyExtractor={(o) => o.id}
           contentContainerStyle={{ padding: 16, paddingBottom: 96 }}
+          style={{
+            opacity: ordersQuery.isFetching && !ordersQuery.isPending ? 0.7 : 1,
+          }}
           renderItem={({ item }) => (
             <OrderCard order={item} onPress={() => router.push(`/order/${item.id}` as never)} />
           )}
           ListEmptyComponent={
             <EmptyOrders
               filterLabel={filter === 'all' ? undefined : STATUS_META[filter].label}
+              onCreate={() => router.push('/order/new' as never)}
+              onResetFilter={() => setFilter('all')}
             />
           }
           refreshControl={

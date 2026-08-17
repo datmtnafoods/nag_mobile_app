@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   View,
   Text,
@@ -22,6 +21,8 @@ import { LineRow } from '../../src/features/orders/components/LineRow';
 import { formatQuantity, formatVND } from '../../src/features/orders/format';
 import { PROVINCE_LABELS } from '../../src/features/orders/types';
 
+type SubmitStatus = 'draft' | 'new';
+
 export default function NewOrder() {
   const user = useCurrentUser();
   const qc = useQueryClient();
@@ -39,13 +40,11 @@ export default function NewOrder() {
     toCreateBody,
   } = useCartStore();
 
-  const [submitStatus, setSubmitStatus] = useState<'draft' | 'new'>('new');
-
   const createMutation = useMutation({
-    mutationFn: async () => {
-      const body = toCreateBody();
+    mutationFn: async (status: SubmitStatus) => {
+      const body = toCreateBody({ asDraft: status === 'draft' });
       if (!body) throw new Error('Đơn hàng chưa đủ thông tin');
-      return createOrder({ ...body, status: submitStatus }, user?.id ?? 'me');
+      return createOrder({ ...body, status }, user?.id ?? 'me');
     },
     onSuccess: (order) => {
       qc.invalidateQueries({ queryKey: ['orders'] });
@@ -55,7 +54,9 @@ export default function NewOrder() {
     },
   });
 
-  const canSubmit = lines.length > 0 && customer && delivery;
+  const canSaveDraft = lines.length > 0;
+  const canSubmit = lines.length > 0 && Boolean(customer) && Boolean(delivery);
+  const pending = createMutation.isPending;
 
   const confirmReset = () => {
     Alert.alert('Xoá đơn nháp?', 'Toàn bộ giống & khách hàng đã chọn sẽ bị xoá.', [
@@ -65,6 +66,16 @@ export default function NewOrder() {
         style: 'destructive',
         onPress: () => reset(),
       },
+    ]);
+  };
+
+  const confirmRemoveLine = (idx: number) => {
+    const line = lines[idx];
+    if (!line) return;
+    const label = line.seedProductName ?? line.seedProductId;
+    Alert.alert('Xoá dòng này?', `${label} · SL ${formatQuantity(line.quantity)}`, [
+      { text: 'Huỷ', style: 'cancel' },
+      { text: 'Xoá', style: 'destructive', onPress: () => removeLine(idx) },
     ]);
   };
 
@@ -117,7 +128,7 @@ export default function NewOrder() {
                     line={line}
                     editable
                     onQuantityChange={(delta) => updateLineQuantity(idx, line.quantity + delta)}
-                    onRemove={() => removeLine(idx)}
+                    onRemove={() => confirmRemoveLine(idx)}
                   />
                 ))}
               </View>
@@ -169,7 +180,19 @@ export default function NewOrder() {
                       ) : null}
                     </View>
                   </View>
-                ) : null}
+                ) : (
+                  <View className="mt-2 rounded-input bg-amber-50 border border-amber-200 p-2 flex-row items-start">
+                    <Ionicons
+                      name="alert-circle-outline"
+                      size={16}
+                      color="#b45309"
+                      style={{ marginTop: 2 }}
+                    />
+                    <Text className="text-caption text-amber-800 ml-2 flex-1">
+                      Chưa có tỉnh nhận hàng. Nhấn &ldquo;Đổi khách&rdquo; để bổ sung.
+                    </Text>
+                  </View>
+                )}
               </View>
             ) : (
               <View className="py-6 items-center">
@@ -201,9 +224,7 @@ export default function NewOrder() {
             </View>
             <View className="flex-row items-center justify-between mt-2">
               <Text className="text-white/80 text-caption">Tạm tính</Text>
-              <Text className="text-white text-h2 font-bold">
-                {formatVND(totalAmount())}
-              </Text>
+              <Text className="text-white text-h2 font-bold">{formatVND(totalAmount())}</Text>
             </View>
           </View>
 
@@ -221,22 +242,17 @@ export default function NewOrder() {
             <Button
               label="Lưu nháp"
               variant="secondary"
-              disabled={!canSubmit || createMutation.isPending}
-              onPress={() => {
-                setSubmitStatus('draft');
-                createMutation.mutate();
-              }}
+              disabled={!canSaveDraft || pending}
+              loading={pending && createMutation.variables === 'draft'}
+              onPress={() => createMutation.mutate('draft')}
             />
           </View>
           <View className="flex-[1.4]">
             <Button
               label="Gửi đơn"
-              disabled={!canSubmit}
-              loading={createMutation.isPending && submitStatus === 'new'}
-              onPress={() => {
-                setSubmitStatus('new');
-                createMutation.mutate();
-              }}
+              disabled={!canSubmit || pending}
+              loading={pending && createMutation.variables === 'new'}
+              onPress={() => createMutation.mutate('new')}
             />
           </View>
         </View>

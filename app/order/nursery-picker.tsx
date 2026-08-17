@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Stack } from 'expo-router';
@@ -46,6 +47,22 @@ export default function NurseryPicker() {
     const n = Number.parseInt(qty, 10);
     return Boolean(selectedProduct && nursery && Number.isFinite(n) && n > 0);
   }, [selectedProduct, nursery, qty]);
+
+  const resetToNurseryList = useCallback(() => {
+    setNursery(null);
+    setSelectedProduct(null);
+    setQ('');
+  }, []);
+
+  // Android hardware back: khi đang ở màn chọn giống, back quay về màn chọn viện.
+  useEffect(() => {
+    if (!nursery) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      resetToNurseryList();
+      return true;
+    });
+    return () => sub.remove();
+  }, [nursery, resetToNurseryList]);
 
   const onAdd = () => {
     if (!selectedProduct || !nursery) return;
@@ -113,11 +130,7 @@ export default function NurseryPicker() {
       >
         <View className="px-4 pt-3">
           <Pressable
-            onPress={() => {
-              setNursery(null);
-              setSelectedProduct(null);
-              setQ('');
-            }}
+            onPress={resetToNurseryList}
             className="flex-row items-center py-2"
           >
             <Ionicons name="chevron-back" size={18} color="#6b7280" />

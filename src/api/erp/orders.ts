@@ -25,11 +25,19 @@ function paginate<T>(all: T[], page = 1, pageSize = 20): Paginated<T> {
   };
 }
 
-function newIdSuffix() {
-  // Deterministic-ish suffix based on store size — Math.random not allowed in workflow scripts,
-  // but here we're in app code where random is fine at runtime.
-  const n = Math.floor(Math.random() * 900 + 100);
-  return String(n);
+function newIdSuffix(shortDate: string): string {
+  const prefix = `so_${shortDate}_`;
+  const used = new Set<number>();
+  for (const o of MOCK_ORDER_STORE) {
+    if (o.id.startsWith(prefix)) {
+      const n = Number.parseInt(o.id.slice(prefix.length), 10);
+      if (Number.isFinite(n)) used.add(n);
+    }
+  }
+  let n = 100 + used.size;
+  while (used.has(n) && n < 1000) n++;
+  if (n >= 1000) n = 100 + MOCK_ORDER_STORE.length;
+  return String(n).padStart(3, '0');
 }
 
 function todayIso(): string {
@@ -47,7 +55,7 @@ function nowIso(): string {
 function mockCreateOrder(body: CreateOrderBody, createdBy: string): SeedOrder {
   const orderedOn = body.orderedOn ?? todayIso();
   const shortDate = orderedOn.slice(2).replaceAll('-', '');
-  const suffix = newIdSuffix();
+  const suffix = newIdSuffix(shortDate);
   const customers: OrderCustomer[] = body.customers.map((c) => ({
     partyId: c.partyId,
     name: c.name,

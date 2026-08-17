@@ -42,7 +42,7 @@ export const STATUS_META: Record<OrderStatus, StatusMeta> = {
   new: { label: 'Chờ xác nhận', bg: 'bg-amber-100', text: 'text-amber-800', icon: 'time-outline' },
   confirmed: { label: 'Đã xác nhận', bg: 'bg-sky-100', text: 'text-sky-800', icon: 'checkmark-outline' },
   producing: { label: 'Đang sản xuất', bg: 'bg-primary-50', text: 'text-primary-700', icon: 'construct-outline' },
-  delivering: { label: 'Đang giao', bg: 'bg-primary-50', text: 'text-primary-700', icon: 'car-outline' },
+  delivering: { label: 'Đang giao', bg: 'bg-indigo-100', text: 'text-indigo-800', icon: 'car-outline' },
   completed: { label: 'Hoàn tất', bg: 'bg-green-100', text: 'text-green-800', icon: 'checkmark-done-outline' },
   cancelled: { label: 'Đã huỷ', bg: 'bg-red-50', text: 'text-red-700', icon: 'close-circle-outline' },
 };

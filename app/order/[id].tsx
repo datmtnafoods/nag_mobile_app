@@ -17,7 +17,7 @@ import { getOrder, updateOrderStatus } from '../../src/api/erp/orders';
 import { apiErrorMessage } from '../../src/api/client';
 import { useCurrentUser } from '../../src/auth/store';
 import { allowedTransitions } from '../../src/features/orders/fsm';
-import { formatDateTime, formatQuantity, formatVND } from '../../src/features/orders/format';
+import { formatDate, formatDateTime, formatQuantity, formatVND } from '../../src/features/orders/format';
 import { PROVINCE_LABELS } from '../../src/features/orders/types';
 import type { OrderStatus } from '../../src/features/orders/types';
 import { StatusChip } from '../../src/features/orders/components/StatusChip';
@@ -99,7 +99,7 @@ export default function OrderDetail() {
           <View>
             <Text className="text-h2 text-ink">{order.orderNo}</Text>
             <Text className="text-caption text-ink-muted mt-1">
-              Ngày đặt: {order.orderedOn}
+              Ngày đặt: {formatDate(order.orderedOn)}
             </Text>
             <Text className="text-caption text-ink-muted">
               Cập nhật: {formatDateTime(order.updatedAt)}
@@ -183,7 +183,13 @@ export default function OrderDetail() {
               <Button
                 label={t.label}
                 variant={t.destructive ? 'secondary' : 'primary'}
+                disabled={statusMutation.isPending}
+                loading={
+                  statusMutation.isPending && statusMutation.variables?.status === t.to
+                }
                 onPress={() => {
+                  if (statusMutation.isPending) return;
+                  statusMutation.reset();
                   if (t.requiresReason) {
                     setPendingTransition({ to: t.to, label: t.label, requiresReason: true });
                     setReason('');
@@ -200,8 +206,12 @@ export default function OrderDetail() {
       <Modal
         visible={pendingTransition?.requiresReason === true}
         transparent
+        statusBarTranslucent
         animationType="slide"
-        onRequestClose={() => setPendingTransition(null)}
+        onRequestClose={() => {
+          setPendingTransition(null);
+          statusMutation.reset();
+        }}
       >
         <KeyboardAvoidingView
           className="flex-1 justify-end bg-black/40"
@@ -232,7 +242,10 @@ export default function OrderDetail() {
             <View className="flex-row gap-2 mt-2">
               <View className="flex-1">
                 <Pressable
-                  onPress={() => setPendingTransition(null)}
+                  onPress={() => {
+                    setPendingTransition(null);
+                    statusMutation.reset();
+                  }}
                   className="h-button rounded-card border border-border items-center justify-center"
                 >
                   <Text className="text-ink font-semibold">Huỷ bỏ</Text>

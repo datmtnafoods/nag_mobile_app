@@ -10,11 +10,13 @@ type CustomerDraft = {
 };
 
 type CartState = {
+  ownerUserId?: string;
   lines: OrderLine[];
   customer?: CustomerDraft;
   delivery?: OrderDelivery;
   note?: string;
 
+  setOwner: (userId: string | undefined) => void;
   addLine: (line: OrderLine) => void;
   updateLineQuantity: (index: number, quantity: number) => void;
   removeLine: (index: number) => void;
@@ -25,16 +27,20 @@ type CartState = {
 
   totalQuantity: () => number;
   totalAmount: () => number;
-  toCreateBody: () => {
+  toCreateBody: (opts?: { asDraft?: boolean }) => {
     customers: Array<Pick<OrderCustomer, 'partyId' | 'phones' | 'name' | 'lines' | 'deliveries'>>;
     note?: string;
   } | null;
 };
 
+export const CART_STORAGE_KEY = 'nag.cart';
+
 export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       lines: [],
+
+      setOwner: (userId) => set({ ownerUserId: userId }),
 
       addLine: (line) =>
         set((s) => {
@@ -82,16 +88,23 @@ export const useCartStore = create<CartState>()(
       setDelivery: (delivery) => set({ delivery }),
       setNote: (note) => set({ note }),
 
-      reset: () => set({ lines: [], customer: undefined, delivery: undefined, note: undefined }),
+      reset: () =>
+        set({
+          lines: [],
+          customer: undefined,
+          delivery: undefined,
+          note: undefined,
+        }),
 
       totalQuantity: () => get().lines.reduce((s, l) => s + l.quantity, 0),
       totalAmount: () =>
         get().lines.reduce((s, l) => s + (l.amount ?? l.unitPrice * l.quantity), 0),
 
-      toCreateBody: () => {
+      toCreateBody: (opts) => {
         const { lines, customer, delivery, note } = get();
         if (!lines.length) return null;
-        if (!delivery) return null;
+        const asDraft = Boolean(opts?.asDraft);
+        if (!asDraft && !delivery) return null;
         return {
           note,
           customers: [
@@ -99,11 +112,13 @@ export const useCartStore = create<CartState>()(
               partyId: customer?.partyId,
               name: customer?.name,
               phones: customer?.phones,
-              deliveries: [delivery],
+              deliveries: delivery ? [delivery] : [],
               lines: lines.map((l) => ({
                 nurseryId: l.nurseryId,
                 seedProductId: l.seedProductId,
                 quantity: l.quantity,
+                // NOTE: unitPrice có thể cũ khi cart persist qua nhiều ngày.
+                // Backend nên là source-of-truth về giá; client chỉ estimate.
                 unitPrice: l.unitPrice,
               })),
             },
@@ -112,10 +127,27 @@ export const useCartStore = create<CartState>()(
       },
     }),
     {
-      name: 'nag.cart',
+      name: CART_STORAGE_KEY,
+      version: 1,
       storage: createJSONStorage(() => AsyncStorage),
-      // Persist chỉ lines + note (không giữ PII customer/delivery giữa session).
-      partialize: (state) => ({ lines: state.lines, note: state.note }),
+      // Persist lines + note + ownerUserId. KHÔNG persist customer/delivery vì là PII.
+      partialize: (state) => ({
+        ownerUserId: state.ownerUserId,
+        lines: state.lines,
+        note: state.note,
+      }),
     },
   ),
 );
+
+/**
+ * Gọi khi user login mới. Nếu cart persisted thuộc user khác → clear để tránh
+ * lẫn dữ liệu giữa các tài khoản trên cùng thiết bị.
+ */
+export function reconcileCartForUser(userId: string | undefined) {
+  const state = useCartStore.getState();
+  if (state.ownerUserId && state.ownerUserId !== userId) {
+    state.reset();
+  }
+  state.setOwner(userId);
+}

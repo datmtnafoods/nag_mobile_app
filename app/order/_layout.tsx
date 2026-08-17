@@ -1,6 +1,16 @@
-import { Stack } from 'expo-router';
+import { Redirect, Stack, useSegments } from 'expo-router';
+import { useIsAuthenticated } from '../../src/auth/store';
 
 export default function OrderLayout() {
+  const isAuth = useIsAuthenticated();
+  const segments = useSegments();
+
+  if (!isAuth) {
+    // Segments looks like ['order', '[id]'] or ['order', 'new'] — preserve as next
+    const path = '/' + segments.join('/');
+    return <Redirect href={`/(auth)/login?next=${encodeURIComponent(path)}` as never} />;
+  }
+
   return (
     <Stack
       screenOptions={{

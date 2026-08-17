@@ -1,7 +1,7 @@
 import { View, Text, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { SeedOrder } from '../types';
-import { formatDate, formatQuantity, formatVND } from '../format';
+import { formatDate, formatQuantity, formatVND, STATUS_META } from '../format';
 import { StatusChip } from './StatusChip';
 
 export function OrderCard({ order, onPress }: { order: SeedOrder; onPress: () => void }) {
@@ -13,6 +13,9 @@ export function OrderCard({ order, onPress }: { order: SeedOrder; onPress: () =>
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Đơn ${order.orderNo}, ${STATUS_META[order.status].label}, ${formatVND(order.totalAmount)}${primaryCustomer?.name ? `, khách ${primaryCustomer.name}` : ''}`}
+      accessibilityHint="Nhấn để xem chi tiết đơn"
       className="rounded-card bg-white border border-border p-4 mb-3 active:bg-bg-soft"
     >
       <View className="flex-row items-start justify-between mb-2">

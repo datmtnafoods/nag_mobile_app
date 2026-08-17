@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Stack } from 'expo-router';
@@ -54,23 +55,43 @@ export default function CustomerPicker() {
     enabled: debouncedQ.trim().length >= 2,
   });
 
+  const normalizedPhone = useMemo(
+    () => manualPhone.trim().replace(/[\s\-.]+/g, '').replace(/^84/, '+84'),
+    [manualPhone],
+  );
+
+  const phoneError = useMemo(() => {
+    if (!manualPhone.trim()) return null;
+    return /^(0[3-9]\d{8}|\+84[3-9]\d{8})$/.test(normalizedPhone)
+      ? null
+      : 'Số điện thoại không hợp lệ (10 số, đầu 03–09)';
+  }, [manualPhone, normalizedPhone]);
+
   const manualValid = useMemo(() => {
-    const phone = manualPhone.trim();
-    const validPhone = /^(0[3-9]\d{8}|\+84[3-9]\d{8})$/.test(phone);
-    return manualName.trim().length >= 2 && validPhone;
-  }, [manualName, manualPhone]);
+    return manualName.trim().length >= 2 && manualPhone.trim().length > 0 && !phoneError;
+  }, [manualName, manualPhone, phoneError]);
 
   const chooseParty = (p: Party) => {
-    setCustomer({ partyId: p.id, name: p.name, phones: p.phones });
     if (p.province) {
+      setCustomer({ partyId: p.id, name: p.name, phones: p.phones });
       setDelivery({ province: p.province, address: p.address });
+      router.back();
+      return;
     }
-    router.back();
+    // Party thiếu tỉnh giao — chuyển sang tab manual để bổ sung, prefill để user không nhập lại
+    setManualName(p.name);
+    setManualPhone(p.phones[0] ?? '');
+    setManualAddress(p.address ?? '');
+    setMode('manual');
+    Alert.alert(
+      'Thiếu tỉnh nhận hàng',
+      'Khách này chưa có tỉnh nhận hàng. Chọn tỉnh và lưu để tiếp tục tạo đơn.',
+    );
   };
 
   const submitManual = () => {
     if (!manualValid) return;
-    setCustomer({ name: manualName.trim(), phones: [manualPhone.trim()] });
+    setCustomer({ name: manualName.trim(), phones: [normalizedPhone] });
     setDelivery({
       province: manualProvince,
       address: manualAddress.trim() || undefined,
@@ -186,6 +207,7 @@ export default function CustomerPicker() {
               keyboardType="phone-pad"
               value={manualPhone}
               onChangeText={setManualPhone}
+              error={phoneError ?? undefined}
             />
             <Text className="text-caption text-ink-muted mb-1">Tỉnh nhận hàng</Text>
             <View className="flex-row flex-wrap -mx-1 mb-3">

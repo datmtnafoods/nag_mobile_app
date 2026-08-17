@@ -34,8 +34,9 @@ function statusIconColor(status: OrderStatus): string {
     case 'confirmed':
       return '#075985';
     case 'producing':
-    case 'delivering':
       return '#a3131f';
+    case 'delivering':
+      return '#3730a3';
     case 'completed':
       return '#166534';
     case 'cancelled':
