@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View,
   Text,
+  Pressable,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -44,12 +45,35 @@ function buildLoginRedirectHref(params: { code: string; sr: string; t?: string }
   return `/(auth)/login?next=${encodeURIComponent(next)}`;
 }
 
+function useCloseHandler() {
+  return useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/' as never);
+  }, []);
+}
+
+function HeaderCloseButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={12}
+      accessibilityRole="button"
+      accessibilityLabel="Đóng"
+      style={{ paddingHorizontal: 4 }}
+    >
+      <Ionicons name="close" size={26} color="#111827" />
+    </Pressable>
+  );
+}
+
 export default function Activation() {
   const params = useLocalSearchParams<{ code?: string; sr?: string; t?: string }>();
   const code = typeof params.code === 'string' ? params.code : '';
   const sr = typeof params.sr === 'string' ? params.sr : '';
   const t = typeof params.t === 'string' ? params.t : undefined;
   const isAuth = useIsAuthenticated();
+
+  const close = useCloseHandler();
 
   const [succeeded, setSucceeded] = useState<null | { activationId: string; activatedAt: string }>(
     null,
@@ -93,7 +117,12 @@ export default function Activation() {
   if (!code || !sr) {
     return (
       <SafeAreaView className="flex-1 bg-bg">
-        <Stack.Screen options={{ title: 'Kích hoạt tem' }} />
+        <Stack.Screen
+          options={{
+            title: 'Kích hoạt tem',
+            headerLeft: () => <HeaderCloseButton onPress={close} />,
+          }}
+        />
         <View className="flex-1 items-center justify-center px-6">
           <Ionicons name="alert-circle-outline" size={64} color="#dd1c2e" />
           <Text className="text-h2 text-ink mt-3">Thiếu thông tin tem</Text>
@@ -101,7 +130,7 @@ export default function Activation() {
             Đường dẫn kích hoạt không có mã lô hoặc số serial.
           </Text>
           <View className="mt-6 w-full">
-            <Button label="Quay lại" onPress={() => router.back()} />
+            <Button label="Quay lại" onPress={close} />
           </View>
         </View>
       </SafeAreaView>
@@ -111,7 +140,14 @@ export default function Activation() {
   if (succeeded) {
     return (
       <SafeAreaView className="flex-1 bg-bg" edges={['top', 'bottom']}>
-        <Stack.Screen options={{ title: 'Kích hoạt thành công' }} />
+        <Stack.Screen
+          options={{
+            title: 'Kích hoạt thành công',
+            headerLeft: () => (
+              <HeaderCloseButton onPress={() => router.replace('/' as never)} />
+            ),
+          }}
+        />
         <View className="flex-1 items-center justify-center px-6">
           <View className="h-20 w-20 rounded-frame bg-green-100 items-center justify-center">
             <Ionicons name="checkmark-circle" size={64} color="#16a34a" />
@@ -148,7 +184,12 @@ export default function Activation() {
 
   return (
     <SafeAreaView className="flex-1 bg-bg" edges={['bottom']}>
-      <Stack.Screen options={{ title: 'Kích hoạt tem' }} />
+      <Stack.Screen
+        options={{
+          title: 'Kích hoạt tem',
+          headerLeft: () => <HeaderCloseButton onPress={close} />,
+        }}
+      />
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
