@@ -25,8 +25,38 @@ export async function searchParties(q: string): Promise<Party[]> {
         p.phones.some((ph) => ph.includes(needle)),
     );
   }
-  const { data } = await client.get<{ data: Party[] }>('/parties', { params: { q } });
-  return data.data;
+  // Backend trả { rows, total } theo `listResponse` (nag_erp_api/src/core/list.js).
+  const { data } = await client.get<{ rows: Party[] }>('/parties', { params: { q } });
+  return data.rows;
+}
+
+/**
+ * Liệt kê nông hộ cho màn quản lý. Khác `searchParties` (cố ý trả `[]` khi rỗng
+ * để không nạp cả bảng lúc gõ tìm), hàm này trả danh sách đầy đủ để duyệt.
+ */
+export async function listParties(
+  params: { q?: string; kind?: PartyKind } = {},
+): Promise<Party[]> {
+  const { q, kind } = params;
+  if (MOCK_API) {
+    await new Promise((r) => setTimeout(r, MOCK_DELAY));
+    const needle = q?.trim().toLowerCase();
+    return MOCK_PARTIES.filter((p) => {
+      // Hộ seed cũ (p_001..003) chưa gắn `kind` — coi như household, đừng loại.
+      if (kind && p.kind && p.kind !== kind) return false;
+      if (needle) {
+        return (
+          p.name.toLowerCase().includes(needle) ||
+          p.phones.some((ph) => ph.includes(needle))
+        );
+      }
+      return true;
+    });
+  }
+  const { data } = await client.get<{ rows: Party[] }>('/parties', {
+    params: { q, kind, pageSize: 200 },
+  });
+  return data.rows;
 }
 
 export async function getParty(id: string): Promise<Party | null> {
@@ -34,13 +64,22 @@ export async function getParty(id: string): Promise<Party | null> {
     await new Promise((r) => setTimeout(r, 120));
     return MOCK_PARTIES.find((p) => p.id === id) ?? null;
   }
-  const { data } = await client.get<{ data: Party }>(`/parties/${id}`);
-  return data.data ?? null;
+  // Backend trả object trần (200) hoặc 404 (svc.getById throw notFound).
+  try {
+    const { data } = await client.get<Party>(`/parties/${id}`);
+    return data ?? null;
+  } catch (err: unknown) {
+    const status = (err as { response?: { status?: number } } | null)?.response?.status;
+    if (status === 404) return null;
+    throw err;
+  }
 }
 
 /** Nạp nhiều hộ một lượt — để join tên hộ vào danh sách thửa mà không N+1. */
-export async function getPartiesByIds(ids: string[]): Promise<Record<string, Party>> {
-  const unique = Array.from(new Set(ids.filter(Boolean)));
+export async function getPartiesByIds(
+  ids: Array<string | null | undefined>,
+): Promise<Record<string, Party>> {
+  const unique = Array.from(new Set(ids.filter((x): x is string => Boolean(x))));
   if (unique.length === 0) return {};
   if (MOCK_API) {
     await new Promise((r) => setTimeout(r, 100));
@@ -53,8 +92,8 @@ export async function getPartiesByIds(ids: string[]): Promise<Record<string, Par
   const results = await Promise.all(
     unique.map((id) =>
       client
-        .get<{ data: Party }>(`/parties/${id}`)
-        .then((r) => r.data.data)
+        .get<Party>(`/parties/${id}`)
+        .then((r) => r.data)
         .catch(() => null),
     ),
   );
@@ -73,6 +112,12 @@ export type CreatePartyInput = {
   lat?: number;
   lng?: number;
   kind?: PartyKind;
+  // ─ Danh tính điền từ QR mặt sau CCCD. Backend cần thêm cột tương ứng (xem
+  //   doc-comment createParty). Số CCCD là dữ liệu cá nhân nhạy cảm (NĐ 13/2023).
+  cccd?: string;
+  /** Ngày sinh ISO 'YYYY-MM-DD'. */
+  dob?: string;
+  gender?: 'nam' | 'nu';
 };
 
 function nextPartyId(kind: PartyKind): string {
@@ -116,6 +161,20 @@ export async function createParty(input: CreatePartyInput): Promise<Party> {
       }
     }
 
+    const cccd = input.cccd?.trim() || undefined;
+    if (cccd) {
+      // Backend nên đặt UNIQUE cho `party.cccd` (một số CCCD = một hộ). Mock chặn
+      // trước để lúc nối thật không vỡ, giống guard số điện thoại ở trên.
+      const trungCccd = MOCK_PARTIES.find((p) => p.cccd === cccd);
+      if (trungCccd) {
+        throw new MockApiError(
+          `Số CCCD này đã thuộc hộ "${trungCccd.name}". Mỗi CCCD chỉ gắn một hộ.`,
+          'cccd_da_ton_tai',
+          409,
+        );
+      }
+    }
+
     const kind: PartyKind = input.kind ?? 'household';
     const party: Party = {
       id: nextPartyId(kind),
@@ -126,13 +185,19 @@ export async function createParty(input: CreatePartyInput): Promise<Party> {
       lat: input.lat,
       lng: input.lng,
       kind,
+      cccd,
+      dob: input.dob || undefined,
+      gender: input.gender,
     };
     MOCK_PARTIES.push(party);
     return party;
   }
-  const { data } = await client.post<{ data: Party }>('/parties', {
+  // `...input` đã mang cccd/dob/gender; backend cần thêm cột + nới RBAC
+  // `party:create` cho field_staff (xem doc-comment trên) trước khi flip MOCK_API=0.
+  // Backend trả object trần (201) — nag_erp_api/src/modules/party/routes.js.
+  const { data } = await client.post<Party>('/parties', {
     ...input,
     kind: input.kind ?? 'household',
   });
-  return data.data;
+  return data;
 }

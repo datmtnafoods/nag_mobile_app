@@ -53,6 +53,13 @@ export type Party = {
   commune?: string;
   lat?: number;
   lng?: number;
+  // ─ Danh tính nông hộ, điền từ QR mặt sau CCCD. Mirror cột `party` backend SẼ
+  //   thêm (xem parties.ts) — hiện chỉ chảy qua mock cho tới khi có endpoint thật.
+  /** Số CCCD 12 số — string để giữ số 0 đầu; dữ liệu cá nhân nhạy cảm (NĐ 13/2023). */
+  cccd?: string;
+  /** Ngày sinh, ISO 'YYYY-MM-DD'. */
+  dob?: string;
+  gender?: 'nam' | 'nu';
 };
 
 export type OrderLine = {
@@ -139,4 +146,10 @@ export const PROVINCE_LABELS: Record<Province, string> = {
   kon_tum: 'Kon Tum',
   khac: 'Tỉnh khác',
   tu_nhan: 'Nhận tại NaGreen',
+};
+
+/** Nhãn hiển thị giới tính — UI không hardcode 'Nam'/'Nữ' rải rác. */
+export const GENDER_LABELS: Record<'nam' | 'nu', string> = {
+  nam: 'Nam',
+  nu: 'Nữ',
 };

@@ -40,7 +40,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "NaGreen cần dùng camera để quét tem QR kích hoạt giống."
+          "cameraPermission": "NaGreen cần dùng camera để quét tem QR kích hoạt giống và mã QR trên thẻ CCCD của nông hộ."
         }
       ],
       [
