@@ -10,9 +10,20 @@ export interface ThuaDat {
   id: string; // GP-YYMMDD-nn
   /** Vùng trồng cha — backend TỰ GÁN theo tâm thửa, client không chọn. */
   zoneId: string | null;
-  /** Nông hộ sở hữu. Backend bắt buộc có khi tạo. */
-  partyId: string;
+  /**
+   * Nông hộ sở hữu. `null` = chưa gán (vẽ thửa trước, gán hộ sau).
+   * LƯU Ý: backend thật hiện BẮT BUỘC partyId khi tạo (`POST /plots` → 400 nếu
+   * thiếu) — thửa không hộ chỉ chạy được ở mock. Gán sau thì `PATCH /plots/:id`
+   * nhận partyId (chạy thật, nhưng mọi PATCH reset thửa về `pending`).
+   */
+  partyId: string | null;
   cropName: string | null;
+  /**
+   * Cây trồng xen canh (cây phụ). Cây chính là `cropName` — cây quyết định lịch
+   * canh tác; cây xen chỉ ghi kèm để biết. Backend `growing_plot` KHÔNG có cột
+   * này (mock giữ riêng, giống `ngayGoc`); đợt nối backend cần thêm cột.
+   */
+  cropXen?: string;
   boundary: Ring;
   areaHa: number;
   status: PlotStatus;
@@ -44,9 +55,12 @@ export interface ThuaDatKemHo extends ThuaDat {
  * `zoneId`/`province`/`commune` sẽ bị bỏ im lặng (backend tự tính hoặc ép).
  */
 export interface CreateThuaDatBody {
-  partyId: string;
+  /** Optional: cho phép vẽ thửa trước, gán hộ sau (mock-only — xem `ThuaDat.partyId`). */
+  partyId?: string;
   boundary: Ring;
   cropName?: string;
+  /** Cây trồng xen canh — mock-only, backend chưa có cột (xem `ThuaDat.cropXen`). */
+  cropXen?: string;
   note?: string;
   /** Mock-only — backend chưa có cột `planted_at`, gửi lên sẽ bị bỏ im lặng. */
   ngayGoc?: string;

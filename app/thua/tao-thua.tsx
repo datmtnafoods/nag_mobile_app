@@ -1,45 +1,40 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
+  Switch,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
-import { createParty, searchParties } from '../../src/api/erp/parties';
 import { createPlot } from '../../src/api/erp/growing-areas';
 import { reverseGeocode, ghepDiaChi } from '../../src/api/erp/geocode';
 import { apiErrorMessage } from '../../src/api/client';
 import { Button } from '../../src/components/Button';
 import { Input } from '../../src/components/Input';
 import { DateField } from '../../src/components/DateField';
-import { EmptyState } from '../../src/components/EmptyState';
-import { DiaChiField } from '../../src/features/location/components/DiaChiField';
-import { DienTichInput } from '../../src/features/den-thua/components/DienTichInput';
-import {
-  doiRaM2,
-  khoangCachM,
-  oVuongTuDiem,
-  tuCat,
-  type DonViDienTich,
-  type Ring,
-} from '../../src/features/den-thua/geo';
+import { areaHa, centroid, tuCat } from '../../src/features/den-thua/geo';
 import { RanhThuaPreview } from '../../src/features/den-thua/components/RanhThuaPreview';
-
-/** Cùng ngưỡng với màn dò thửa — ghim đỉnh lệch quá mức thì cả ranh vô nghĩa. */
-const NGUONG_SAI_SO_M = 50;
-import { useDeviceLocation } from '../../src/hooks/useDeviceLocation';
-import type { Party } from '../../src/features/orders/types';
-
-const PHONE_RE = /^(0[3-9]\d{8}|\+84[3-9]\d{8})$/;
+import { BanDoRanh } from '../../src/features/den-thua/components/BanDoRanh';
+import { ChonCayTrong } from '../../src/features/den-thua/components/ChonCayTrong';
+import { TimelineCanhTac } from '../../src/features/den-thua/components/TimelineCanhTac';
+import {
+  chiSoMocHienTai,
+  nhanDangCayTrong,
+  tinhMocCanhTac,
+} from '../../src/features/den-thua/lich-canh-tac';
+import {
+  ChonNongHo,
+  giaiQuyetHo,
+  hoHopLe,
+  type KetQuaChonHo,
+} from '../../src/features/den-thua/components/ChonNongHo';
+import { useRanhDraftStore } from '../../src/stores/ranh-draft';
 
 export default function TaoThua() {
   const params = useLocalSearchParams<{ lat?: string; lng?: string }>();
@@ -47,180 +42,115 @@ export default function TaoThua() {
 
   const [buoc, setBuoc] = useState<1 | 2>(1);
 
-  // Toạ độ ghim — nhận từ màn dò, cho phép đo lại tại chỗ.
-  const [lat, setLat] = useState(Number(params.lat) || 0);
-  const [lng, setLng] = useState(Number(params.lng) || 0);
-  const { state: gpsState, layViTri } = useDeviceLocation({
-    accuracy: Location.Accuracy.High,
-    timeoutMs: 15000,
-  });
+  // Toạ độ ghim từ màn dò — tâm bản đồ khi vẽ ranh + vị trí mặc định của hộ mới.
+  const lat = Number(params.lat) || 0;
+  const lng = Number(params.lng) || 0;
 
-  // ─ Bước 1: nông hộ
-  const [hoDaChon, setHoDaChon] = useState<Party | null>(null);
-  const [taoHoMoi, setTaoHoMoi] = useState(false);
-  const [tim, setTim] = useState('');
-  const [tenHo, setTenHo] = useState('');
-  const [sdt, setSdt] = useState('');
-  const [diaChi, setDiaChi] = useState('');
-  const [loiHo, setLoiHo] = useState<string | null>(null);
+  // ─ Bước 1: thửa đất
+  // Ranh vẽ được bàn giao qua store tạm (màn full-screen ghi, wizard đọc).
+  const ringBanDo = useRanhDraftStore((s) => s.ring);
+  const xoaRanhDraft = useRanhDraftStore((s) => s.xoa);
 
-  // ─ Bước 2: thửa đất
-  /**
-   * 'ghim_goc' = KTV đi từng góc bấm ghim, ranh thật.
-   * 'nhanh'    = ghim 1 điểm + khai diện tích, app sinh ô vuông — lối thoát cho
-   *              vườn rậm/có hàng rào/KTV vội. Ranh chỉ là ước lượng.
-   */
-  const [cheDo, setCheDo] = useState<'ghim_goc' | 'nhanh'>('ghim_goc');
-  const [dinh, setDinh] = useState<Array<{ lat: number; lng: number; saiSo?: number }>>([]);
-  const [loiGhim, setLoiGhim] = useState<string | null>(null);
-  const [dangGhim, setDangGhim] = useState(false);
-
-  const [dienTich, setDienTich] = useState(3);
-  const [donVi, setDonVi] = useState<DonViDienTich>('sao');
   const [cayTrong, setCayTrong] = useState('');
+  const [xenCanh, setXenCanh] = useState(false);
+  const [cayXen, setCayXen] = useState('');
   // Mốc gốc của timeline canh tác. Mặc định hôm nay, nhưng vườn đã trồng lâu thì
   // KTV phải chỉnh lại — không thì lịch lệch cả năm.
   const [ngayGoc, setNgayGoc] = useState<string | undefined>(
     () => new Date().toISOString().slice(0, 10),
   );
   const [ghiChu, setGhiChu] = useState('');
+  // Bản đồ vệ tinh xem-trước hỏng (mất mạng) → rơi về hình SVG ranh.
+  const [mapPreviewLoi, setMapPreviewLoi] = useState<string | null>(null);
 
-  const timQuery = useQuery({
-    queryKey: ['parties', 'search', tim],
-    queryFn: () => searchParties(tim),
-    enabled: tim.trim().length >= 2 && !taoHoMoi,
-  });
+  // ─ Bước 2: nông hộ (OPTIONAL — vẽ thửa trước, gán hộ sau)
+  const [hoKq, setHoKq] = useState<KetQuaChonHo>({ loai: 'bo_qua' });
+
+  // Tạo thửa mới → xoá ranh nháp cũ để không dính ranh của lần trước.
+  useEffect(() => {
+    xoaRanhDraft();
+  }, [xoaRanhDraft]);
 
   const diaChiQuery = useQuery({
     queryKey: ['geocode', lat, lng],
-    queryFn: async () => ghepDiaChi(await reverseGeocode(lat, lng)),
+    // Cùng key với màn dò thửa nên PHẢI cùng shape — trả nguyên DiaChiGeocode,
+    // ghép chuỗi ở chỗ render.
+    queryFn: () => reverseGeocode(lat, lng),
     enabled: lat !== 0 && lng !== 0,
     staleTime: 60_000,
   });
 
+  const diaChiMacDinh = diaChiQuery.data ? ghepDiaChi(diaChiQuery.data) : undefined;
+
   const luu = useMutation({
     mutationFn: async () => {
-      let partyId = hoDaChon?.id;
+      // Nông hộ optional — 'bo_qua' trả undefined; 'moi' tạo hộ rồi lấy id.
+      const partyId = await giaiQuyetHo(hoKq, { lat, lng, diaChiMacDinh });
 
-      if (!partyId) {
-        const ten = tenHo.trim();
-        if (ten.length < 2) throw new Error('Nhập họ tên nông hộ (tối thiểu 2 ký tự).');
-        const phone = sdt.trim();
-        if (phone && !PHONE_RE.test(phone)) throw new Error('Số điện thoại không hợp lệ.');
-        const ho = await createParty({
-          name: ten,
-          phone: phone || undefined,
-          address: diaChi.trim() || diaChiQuery.data || undefined,
-          lat,
-          lng,
-          kind: 'household',
-        });
-        partyId = ho.id;
-      }
-
-      let boundary: Ring;
-      let note = ghiChu.trim();
-
-      if (cheDo === 'ghim_goc') {
-        if (dinh.length < 3) throw new Error('Cần ít nhất 3 góc để tạo ranh thửa.');
-        boundary = dinh.map((d) => [d.lng, d.lat] as [number, number]);
-        if (tuCat(boundary)) {
-          throw new Error('Ranh bị xoắn — kiểm tra lại thứ tự các góc đã ghim.');
-        }
-      } else {
-        const m2 = doiRaM2(dienTich, donVi);
-        if (!(m2 > 0)) throw new Error('Nhập diện tích lớn hơn 0.');
-        boundary = oVuongTuDiem(lat, lng, m2);
-        // Backend không có cột đánh dấu chất lượng ranh — dùng tiền tố trong
-        // `note` để văn phòng lọc ra thửa cần đo lại. Khi backend thêm cột
-        // `ranhChinhXac` thì migrate theo tiền tố này.
-        const nhan = `[Ranh ước lượng: ghim 1 điểm, khai ${dienTich} ${donVi === 'sao' ? 'sào' : donVi === 'ha' ? 'ha' : 'm²'}]`;
-        note = note ? `${nhan} ${note}` : nhan;
+      if (ringBanDo.length < 3) throw new Error('Vẽ ít nhất 3 đỉnh ranh thửa trên bản đồ.');
+      if (tuCat(ringBanDo)) {
+        throw new Error('Ranh bị xoắn — kéo lại đỉnh cho hết cắt chéo.');
       }
 
       return createPlot({
         partyId,
-        boundary,
+        boundary: ringBanDo,
         cropName: cayTrong.trim() || undefined,
+        cropXen: xenCanh && cayXen.trim() ? cayXen.trim() : undefined,
         ngayGoc: ngayGoc ? new Date(ngayGoc).toISOString() : undefined,
-        note: note || undefined,
+        note: ghiChu.trim() || undefined,
       });
     },
     onSuccess: (thua) => {
       qc.invalidateQueries({ queryKey: ['do-thua'] });
       qc.invalidateQueries({ queryKey: ['parties'] });
-      Alert.alert(
-        'Đã tạo thửa đất',
-        `${thua.id} · ${thua.areaHa} ha. Thửa đang chờ văn phòng duyệt.`,
-        [
-          {
-            text: 'Ghi nhật ký luôn',
-            onPress: () =>
-              router.replace(
-                `/thua/nhat-ky?plotId=${thua.id}&partyId=${thua.partyId}` as never,
-              ),
-          },
-          { text: 'Xong', onPress: () => router.back() },
-        ],
-      );
+      if (thua.partyId) {
+        Alert.alert(
+          'Đã tạo thửa đất',
+          `${thua.id} · ${thua.areaHa} ha. Thửa đang chờ văn phòng duyệt.`,
+          [
+            {
+              text: 'Ghi nhật ký luôn',
+              onPress: () =>
+                router.replace(
+                  `/thua/nhat-ky?plotId=${thua.id}&partyId=${thua.partyId}` as never,
+                ),
+            },
+            { text: 'Xong', onPress: () => router.back() },
+          ],
+        );
+      } else {
+        Alert.alert(
+          'Đã tạo thửa đất',
+          `${thua.id} · ${thua.areaHa} ha. Thửa chưa gán nông hộ — có thể gán ở màn chi tiết.`,
+          [
+            { text: 'Mở thửa', onPress: () => router.replace(`/thua/${thua.id}` as never) },
+            { text: 'Xong', onPress: () => router.back() },
+          ],
+        );
+      }
     },
     onError: (err) => Alert.alert('Chưa lưu được', apiErrorMessage(err)),
   });
 
-  const coToaDo = lat !== 0 && lng !== 0;
-  const buoc1Xong = Boolean(hoDaChon) || (taoHoMoi && tenHo.trim().length >= 2);
+  const ranhXoan = ringBanDo.length >= 4 && tuCat(ringBanDo);
+  const buoc1Xong = ringBanDo.length >= 3 && !ranhXoan;
+  const buoc2Xong = hoHopLe(hoKq);
 
-  const ring: Ring = dinh.map((d) => [d.lng, d.lat] as [number, number]);
-  const ranhXoan = dinh.length >= 4 && tuCat(ring);
-  const buoc2Xong =
-    cheDo === 'ghim_goc' ? dinh.length >= 3 && !ranhXoan : coToaDo && dienTich > 0;
+  // Xem trước lịch canh tác từ cây chính + ngày kích hoạt (cùng logic màn chi tiết).
+  const lichPreview = useMemo(() => nhanDangCayTrong(cayTrong), [cayTrong]);
+  const mocsPreview = useMemo(
+    () =>
+      lichPreview && ngayGoc ? tinhMocCanhTac(new Date(ngayGoc).toISOString(), lichPreview) : [],
+    [lichPreview, ngayGoc],
+  );
+  const idxPreview = useMemo(() => chiSoMocHienTai(mocsPreview), [mocsPreview]);
 
-  const doLaiViTri = async () => {
-    const vt = await layViTri();
-    if (vt) {
-      setLat(vt.lat);
-      setLng(vt.lng);
-    }
-  };
-
-  /**
-   * Ghim một góc thửa. Chặn khi GPS kém — đỉnh lệch 100 m thì cả thửa sai, thà
-   * bắt KTV đợi vài giây còn hơn lưu ranh vô nghĩa.
-   */
-  const ghimGoc = async () => {
-    setLoiGhim(null);
-    setDangGhim(true);
-    try {
-      const vt = await layViTri();
-      if (!vt) {
-        setLoiGhim('Chưa lấy được vị trí. Ra chỗ thoáng rồi thử lại.');
-        return;
-      }
-      if (vt.doChinhXac != null && vt.doChinhXac > NGUONG_SAI_SO_M) {
-        setLoiGhim(
-          `Sai số ±${Math.round(vt.doChinhXac)} m, quá lớn để ghim góc. Đợi vài giây hoặc ra chỗ thoáng.`,
-        );
-        return;
-      }
-      const truoc = dinh[dinh.length - 1];
-      if (truoc && khoangCachM(truoc, vt) < 5) {
-        setLoiGhim('Góc này quá gần góc trước (dưới 5 m) — đã đi tới góc kế chưa?');
-        return;
-      }
-      setDinh((ds) => [...ds, { lat: vt.lat, lng: vt.lng, saiSo: vt.doChinhXac }]);
-      // Đỉnh đầu cũng là điểm neo cho geocode + cho chế độ nhanh nếu đổi qua.
-      if (dinh.length === 0) {
-        setLat(vt.lat);
-        setLng(vt.lng);
-      }
-    } finally {
-      setDangGhim(false);
-    }
-  };
+  const moManVe = () => router.push(`/thua/ve-ranh?lat=${lat}&lng=${lng}` as never);
 
   return (
     <SafeAreaView className="flex-1 bg-bg-soft" edges={['bottom']}>
-      <Stack.Screen options={{ title: buoc === 1 ? 'Bước 1 · Nông hộ' : 'Bước 2 · Thửa đất' }} />
+      <Stack.Screen options={{ title: buoc === 1 ? 'Bước 1 · Thửa đất' : 'Bước 2 · Nông hộ' }} />
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -247,7 +177,7 @@ export default function TaoThua() {
                   buoc >= b ? 'text-ink font-semibold' : 'text-ink-muted'
                 }`}
               >
-                {b === 1 ? 'Nông hộ' : 'Thửa đất'}
+                {b === 1 ? 'Thửa đất' : 'Nông hộ'}
               </Text>
               {b === 1 ? <View className="flex-1 h-px bg-border mx-2" /> : null}
             </View>
@@ -260,293 +190,94 @@ export default function TaoThua() {
         >
           {buoc === 1 ? (
             <>
-              {hoDaChon ? (
-                <View className="rounded-card bg-green-100 border border-green-300 p-4 mb-4">
-                  <View className="flex-row items-start">
-                    <Ionicons name="checkmark-circle" size={20} color="#166534" />
-                    <View className="ml-2 flex-1">
-                      <Text className="text-body text-green-900 font-semibold">
-                        {hoDaChon.name}
-                      </Text>
-                      {hoDaChon.phones[0] ? (
-                        <Text className="text-caption text-green-800">{hoDaChon.phones[0]}</Text>
-                      ) : null}
-                      {hoDaChon.address ? (
-                        <Text className="text-small text-green-800 mt-0.5">
-                          {hoDaChon.address}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <Pressable onPress={() => setHoDaChon(null)} hitSlop={8} className="p-1">
-                      <Ionicons name="close-circle" size={20} color="#166534" />
-                    </Pressable>
-                  </View>
-                </View>
-              ) : (
-                <>
-                  <View className="flex-row mb-3">
-                    <Pressable
-                      onPress={() => setTaoHoMoi(false)}
-                      className={`flex-1 h-11 rounded-input items-center justify-center border mr-2 ${
-                        !taoHoMoi ? 'bg-primary border-primary' : 'bg-white border-border'
-                      }`}
-                    >
-                      <Text
-                        className={`text-caption font-semibold ${
-                          !taoHoMoi ? 'text-white' : 'text-ink'
-                        }`}
-                      >
-                        Hộ đã có
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => setTaoHoMoi(true)}
-                      className={`flex-1 h-11 rounded-input items-center justify-center border ${
-                        taoHoMoi ? 'bg-primary border-primary' : 'bg-white border-border'
-                      }`}
-                    >
-                      <Text
-                        className={`text-caption font-semibold ${
-                          taoHoMoi ? 'text-white' : 'text-ink'
-                        }`}
-                      >
-                        Hộ mới
-                      </Text>
-                    </Pressable>
-                  </View>
+              {/* Ranh thửa trên ảnh vệ tinh */}
+              <View className="rounded-card bg-white border border-border p-4 mb-4">
+                <Text className="text-caption text-ink-muted uppercase mb-2">
+                  Ranh thửa · vẽ trên ảnh vệ tinh
+                </Text>
 
-                  {taoHoMoi ? (
-                    <View className="rounded-card bg-white border border-border p-4">
-                      <Input
-                        label="Họ và tên *"
-                        placeholder="Nguyễn Văn A"
-                        autoCapitalize="words"
-                        value={tenHo}
-                        onChangeText={(v) => {
-                          setTenHo(v);
-                          setLoiHo(null);
-                        }}
-                      />
-                      <Input
-                        label="Số điện thoại"
-                        placeholder="0912xxxxxx"
-                        keyboardType="phone-pad"
-                        value={sdt}
-                        onChangeText={(v) => {
-                          setSdt(v);
-                          setLoiHo(null);
-                        }}
-                        error={
-                          sdt.trim() && !PHONE_RE.test(sdt.trim())
-                            ? 'Số điện thoại không hợp lệ'
-                            : undefined
-                        }
-                      />
-                      <DiaChiField
-                        value={diaChi}
-                        onChangeText={setDiaChi}
-                        placeholder={diaChiQuery.data ?? 'Thôn, xã, tỉnh'}
-                      />
-                      {loiHo ? (
-                        <Text className="text-small text-red-600">{loiHo}</Text>
-                      ) : null}
-                    </View>
+                {ringBanDo.length >= 3 ? (
+                  mapPreviewLoi ? (
+                    <RanhThuaPreview ring={ringBanDo} />
                   ) : (
-                    <>
-                      <Input
-                        placeholder="Tìm theo tên hoặc số điện thoại…"
-                        leftIcon="search-outline"
-                        value={tim}
-                        onChangeText={setTim}
-                        autoCapitalize="none"
-                      />
-                      {tim.trim().length < 2 ? (
-                        <Text className="text-caption text-ink-muted text-center py-6">
-                          Gõ ít nhất 2 ký tự để tìm.
-                        </Text>
-                      ) : timQuery.isPending ? (
-                        <ActivityIndicator color="#dd1c2e" style={{ marginTop: 16 }} />
-                      ) : (timQuery.data ?? []).length === 0 ? (
-                        <EmptyState
-                          icon="person-outline"
-                          title="Không tìm thấy hộ"
-                          message="Thử số điện thoại, hoặc chuyển sang tạo hộ mới."
-                          cta={{ label: 'Tạo hộ mới', onPress: () => setTaoHoMoi(true) }}
-                        />
-                      ) : (
-                        (timQuery.data ?? []).map((p) => (
-                          <Pressable
-                            key={p.id}
-                            onPress={() => setHoDaChon(p)}
-                            className="rounded-card bg-white border border-border p-3 mb-2 flex-row items-center active:bg-bg-soft"
-                          >
-                            <View className="h-10 w-10 rounded-full bg-primary-50 items-center justify-center mr-3">
-                              <Ionicons name="person" size={18} color="#dd1c2e" />
-                            </View>
-                            <View className="flex-1">
-                              <Text className="text-body text-ink font-semibold">{p.name}</Text>
-                              <Text className="text-caption text-ink-muted">
-                                {p.phones[0] ?? 'Chưa có SĐT'}
-                                {p.address ? ` · ${p.address}` : ''}
-                              </Text>
-                            </View>
-                            <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
-                          </Pressable>
-                        ))
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </>
-          ) : (
-            <>
-              {/* Chọn cách lấy ranh */}
-              <View className="flex-row mb-3">
-                <Pressable
-                  onPress={() => setCheDo('ghim_goc')}
-                  className={`flex-1 h-11 rounded-input items-center justify-center border mr-2 ${
-                    cheDo === 'ghim_goc' ? 'bg-primary border-primary' : 'bg-white border-border'
-                  }`}
-                >
-                  <Text
-                    className={`text-caption font-semibold ${
-                      cheDo === 'ghim_goc' ? 'text-white' : 'text-ink'
-                    }`}
+                    <BanDoRanh
+                      mode="xem"
+                      ring={ringBanDo}
+                      initialCenter={centroid(ringBanDo)}
+                      onMapError={setMapPreviewLoi}
+                      height={200}
+                    />
+                  )
+                ) : (
+                  <View
+                    className="rounded-input border border-dashed border-border bg-bg-soft items-center justify-center"
+                    style={{ height: 120 }}
                   >
-                    Ghim từng góc
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setCheDo('nhanh')}
-                  className={`flex-1 h-11 rounded-input items-center justify-center border ${
-                    cheDo === 'nhanh' ? 'bg-primary border-primary' : 'bg-white border-border'
-                  }`}
-                >
-                  <Text
-                    className={`text-caption font-semibold ${
-                      cheDo === 'nhanh' ? 'text-white' : 'text-ink'
-                    }`}
-                  >
-                    Nhanh (ước lượng)
-                  </Text>
-                </Pressable>
+                    <Ionicons name="map-outline" size={24} color="#9ca3af" />
+                    <Text className="text-small text-ink-muted mt-2 px-4 text-center">
+                      Chưa có ranh. Bấm nút dưới để mở bản đồ vệ tinh và chạm từng góc thửa.
+                    </Text>
+                  </View>
+                )}
+
+                {ringBanDo.length >= 3 ? (
+                  <View className="flex-row justify-between mt-2">
+                    <Text className="text-caption text-ink-muted">{ringBanDo.length} đỉnh</Text>
+                    <Text className="text-caption text-ink">
+                      {areaHa(ringBanDo).toLocaleString('vi-VN')} ha
+                    </Text>
+                  </View>
+                ) : null}
+
+                {ranhXoan ? (
+                  <View className="rounded-input bg-red-50 border border-red-200 p-3 mt-3 flex-row">
+                    <Ionicons name="warning" size={18} color="#b91c1c" />
+                    <Text className="text-small text-red-700 ml-2 flex-1">
+                      Ranh bị xoắn — mở bản đồ và kéo lại đỉnh cho hết cắt chéo.
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View className="mt-3">
+                  <Button
+                    label={ringBanDo.length > 0 ? 'Sửa ranh trên bản đồ' : 'Vẽ ranh trên bản đồ'}
+                    onPress={moManVe}
+                  />
+                </View>
               </View>
 
-              {cheDo === 'ghim_goc' ? (
-                <View className="rounded-card bg-white border border-border p-4 mb-4">
-                  <Text className="text-caption text-ink-muted uppercase mb-2">Ranh thửa</Text>
-
-                  <RanhThuaPreview ring={ring} />
-
-                  {ranhXoan ? (
-                    <View className="rounded-input bg-red-50 border border-red-200 p-3 mt-3 flex-row">
-                      <Ionicons name="warning" size={18} color="#b91c1c" />
-                      <Text className="text-small text-red-700 ml-2 flex-1">
-                        Ranh bị xoắn — có thể ghim nhầm thứ tự góc. Đi theo vòng quanh thửa,
-                        đừng nhảy chéo sang góc đối diện.
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  <View className="mt-3">
-                    <Button
-                      label={
-                        dangGhim || gpsState === 'dang-lay'
-                          ? 'Đang đo vị trí…'
-                          : `Ghim góc ${dinh.length + 1}`
-                      }
-                      loading={dangGhim || gpsState === 'dang-lay'}
-                      disabled={dangGhim || gpsState === 'dang-lay'}
-                      onPress={ghimGoc}
-                    />
-                  </View>
-
-                  {loiGhim ? (
-                    <Text className="text-small text-amber-800 mt-2">{loiGhim}</Text>
-                  ) : (
-                    <Text className="text-small text-ink-muted mt-2">
-                      Đi tới từng góc vườn rồi bấm. Cần ít nhất 3 góc.
-                    </Text>
-                  )}
-
-                  {dinh.length > 0 ? (
-                    <View className="mt-3 pt-3 border-t border-border">
-                      {dinh.map((d, i) => (
-                        <View
-                          key={`${d.lat}-${d.lng}-${i}`}
-                          className="flex-row items-center py-1.5"
-                        >
-                          <View className="h-6 w-6 rounded-full bg-primary items-center justify-center mr-2">
-                            <Text className="text-small text-white font-semibold">{i + 1}</Text>
-                          </View>
-                          <Text className="text-caption text-ink font-mono flex-1">
-                            {d.lat.toFixed(5)}, {d.lng.toFixed(5)}
-                            {d.saiSo != null ? ` · ±${Math.round(d.saiSo)} m` : ''}
-                          </Text>
-                          <Pressable
-                            onPress={() => setDinh((ds) => ds.filter((_, j) => j !== i))}
-                            hitSlop={8}
-                            className="p-1"
-                            accessibilityRole="button"
-                            accessibilityLabel={`Xoá góc ${i + 1}`}
-                          >
-                            <Ionicons name="close-circle" size={18} color="#b91c1c" />
-                          </Pressable>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-                </View>
-              ) : (
-                <>
-                  {/* Toạ độ ghim */}
-                  <View className="rounded-card bg-white border border-border p-4 mb-4">
-                    <Text className="text-caption text-ink-muted uppercase mb-2">Điểm ghim</Text>
-                    {coToaDo ? (
-                      <>
-                        <Text className="text-body text-ink font-mono">
-                          {lat.toFixed(5)}, {lng.toFixed(5)}
-                        </Text>
-                        {diaChiQuery.data ? (
-                          <Text className="text-caption text-ink-muted mt-1">
-                            {diaChiQuery.data}
-                          </Text>
-                        ) : null}
-                      </>
-                    ) : (
-                      <Text className="text-caption text-amber-800">Chưa có toạ độ.</Text>
-                    )}
-                    <View className="mt-3">
-                      <Button
-                        label={gpsState === 'dang-lay' ? 'Đang đo…' : 'Đo lại tại chỗ'}
-                        variant="secondary"
-                        disabled={gpsState === 'dang-lay'}
-                        onPress={doLaiViTri}
-                      />
-                    </View>
-                  </View>
-
-                  <View className="rounded-card bg-white border border-border p-4 mb-4">
-                    <DienTichInput
-                      soLuong={dienTich}
-                      donVi={donVi}
-                      onChange={({ soLuong, donVi: dv }) => {
-                        setDienTich(soLuong);
-                        setDonVi(dv);
-                      }}
-                    />
-                  </View>
-                </>
-              )}
-
+              {/* Cây trồng + xen canh */}
               <View className="rounded-card bg-white border border-border p-4 mb-4">
-                <Input
-                  label="Cây trồng"
-                  placeholder="Chanh leo tím / Cà phê / Bơ…"
-                  value={cayTrong}
-                  onChangeText={setCayTrong}
-                />
+                <ChonCayTrong label="Cây trồng" giaTri={cayTrong} onChange={setCayTrong} />
+
+                <View className="flex-row items-center justify-between py-1">
+                  <View className="flex-1 pr-3">
+                    <Text className="text-caption text-ink font-semibold">Trồng xen canh</Text>
+                    <Text className="text-small text-ink-muted">
+                      Có cây phụ trồng xen trên cùng thửa.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={xenCanh}
+                    onValueChange={setXenCanh}
+                    trackColor={{ true: '#dd1c2e', false: '#d1d5db' }}
+                  />
+                </View>
+
+                {xenCanh ? (
+                  <View className="mt-3">
+                    <ChonCayTrong
+                      label="Cây xen"
+                      giaTri={cayXen}
+                      onChange={setCayXen}
+                      placeholder="Chọn hoặc gõ cây trồng xen…"
+                    />
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Ngày kích hoạt + xem trước lịch canh tác */}
+              <View className="rounded-card bg-white border border-border p-4 mb-4">
                 <DateField
                   label="Ngày kích hoạt / bắt đầu trồng"
                   value={ngayGoc}
@@ -556,6 +287,36 @@ export default function TaoThua() {
                 <Text className="text-small text-ink-muted -mt-2 mb-3">
                   Lịch canh tác tính từ ngày này. Vườn đã trồng lâu thì chỉnh lại cho đúng.
                 </Text>
+
+                <Text className="text-caption text-ink-muted uppercase mb-1">
+                  Lịch canh tác (dự kiến)
+                </Text>
+                {!cayTrong.trim() ? (
+                  <Text className="text-caption text-ink-muted">
+                    Chọn cây trồng để xem lịch dự kiến.
+                  </Text>
+                ) : !lichPreview ? (
+                  <Text className="text-caption text-ink-muted">
+                    Chưa có lịch canh tác cho cây "{cayTrong.trim()}". Vẫn ghi nhật ký bình thường
+                    được.
+                  </Text>
+                ) : !ngayGoc ? (
+                  <Text className="text-caption text-amber-800">
+                    Chọn ngày kích hoạt để dựng lịch.
+                  </Text>
+                ) : (
+                  <>
+                    <TimelineCanhTac mocs={mocsPreview} hienTai={idxPreview} />
+                    <Text className="text-small text-ink-muted mt-2">
+                      Lịch dự kiến từ ngày kích hoạt. Xác nhận từng mốc ở màn chi tiết sau khi tạo
+                      thửa.
+                    </Text>
+                  </>
+                )}
+              </View>
+
+              {/* Ghi chú */}
+              <View className="rounded-card bg-white border border-border p-4 mb-4">
                 <Input
                   label="Ghi chú"
                   placeholder="Đặc điểm nhận biết, đường vào…"
@@ -565,16 +326,20 @@ export default function TaoThua() {
                   onChangeText={setGhiChu}
                 />
               </View>
-
-              {cheDo === 'nhanh' ? (
-                <View className="rounded-card bg-amber-50 border border-amber-200 p-3 flex-row">
-                  <Ionicons name="information-circle-outline" size={18} color="#92400e" />
-                  <Text className="text-small text-amber-900 ml-2 flex-1">
-                    Ranh thửa là ô vuông ước lượng quanh điểm ghim, không phải ranh đo đạc.
-                    Thửa sẽ được đánh dấu để văn phòng biết cần đo lại.
-                  </Text>
-                </View>
-              ) : null}
+            </>
+          ) : (
+            <>
+              <View className="mb-3">
+                <Text className="text-caption text-ink-muted">
+                  Gán nông hộ cho thửa, hoặc bỏ qua để gán sau.
+                </Text>
+              </View>
+              <ChonNongHo
+                giaTri={hoKq}
+                onChange={setHoKq}
+                choBoQua
+                diaChiMacDinh={diaChiMacDinh}
+              />
             </>
           )}
         </ScrollView>
@@ -587,11 +352,7 @@ export default function TaoThua() {
           ) : null}
           <View className="flex-1">
             {buoc === 1 ? (
-              <Button
-                label="Tiếp tục"
-                disabled={!buoc1Xong}
-                onPress={() => setBuoc(2)}
-              />
+              <Button label="Tiếp tục" disabled={!buoc1Xong} onPress={() => setBuoc(2)} />
             ) : (
               <Button
                 label="Lưu thửa đất"

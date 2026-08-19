@@ -23,6 +23,16 @@ export default function ThuaLayout() {
       {/* Chọn / tạo nông hộ nằm ngay ở bước 1 của wizard tạo thửa — không tách
           màn picker riêng, đỡ một lần điều hướng khi đang đứng ngoài thửa. */}
       <Stack.Screen name="tao-thua" options={{ title: 'Tạo thửa đất' }} />
+      {/* Màn vẽ ranh chiếm trọn màn — không header, không vuốt-đóng nhầm khi kéo đỉnh. */}
+      <Stack.Screen
+        name="ve-ranh"
+        options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
+      />
+      {/* Quét QR mặt sau CCCD — full-screen, không vuốt-đóng nhầm khi đang ngắm mã. */}
+      <Stack.Screen
+        name="quet-cccd"
+        options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
+      />
       <Stack.Screen name="[id]" options={{ title: 'Chi tiết thửa' }} />
       <Stack.Screen name="nhat-ky" options={{ title: 'Nhật ký canh tác' }} />
     </Stack>

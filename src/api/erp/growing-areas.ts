@@ -60,11 +60,8 @@ export async function getPlot(id: string): Promise<ThuaDatKemHo | null> {
   const thua = plots.find((p) => p.id === id);
   if (!thua) return null;
   const parties = await getPartiesByIds([thua.partyId]);
-  return {
-    ...thua,
-    tenHo: parties[thua.partyId]?.name,
-    dienThoaiHo: parties[thua.partyId]?.phones?.[0],
-  };
+  const ho = thua.partyId ? parties[thua.partyId] : undefined;
+  return { ...thua, tenHo: ho?.name, dienThoaiHo: ho?.phones?.[0] };
 }
 
 export async function createPlot(body: CreateThuaDatBody): Promise<ThuaDat> {
@@ -72,9 +69,9 @@ export async function createPlot(body: CreateThuaDatBody): Promise<ThuaDat> {
   // tiếng Việt ngay tại form thay vì đợi 400 rồi mới biết.
   const loi = validateRing(body.boundary);
   if (loi) throw new MockApiError(loi, 'ranh_khong_hop_le', 400);
-  if (!body.partyId) {
-    throw new MockApiError('Thửa phải gắn 1 nông hộ.', 'thieu_party', 400);
-  }
+  // Nông hộ KHÔNG bắt buộc lúc tạo (vẽ thửa trước, gán hộ sau). LƯU Ý: backend
+  // thật `service.createPlot` vẫn ném 400 nếu thiếu partyId — thửa không hộ chỉ
+  // chạy được ở mock; đợt nối backend phải nới ràng buộc này.
 
   if (MOCK_API) {
     await new Promise((r) => setTimeout(r, MOCK_DELAY + 200));
@@ -84,8 +81,10 @@ export async function createPlot(body: CreateThuaDatBody): Promise<ThuaDat> {
       // trồng đã duyệt). Mock chưa có vùng trồng nào nên để null — đúng hành vi
       // thật khi tâm không rơi vào vùng nào.
       zoneId: null,
-      partyId: body.partyId,
+      partyId: body.partyId ?? null,
       cropName: body.cropName?.trim() || null,
+      // Cây xen — backend chưa có cột, mock giữ riêng (giống `ngayGoc`).
+      cropXen: body.cropXen?.trim() || undefined,
       boundary: body.boundary,
       areaHa: areaHa(body.boundary),
       // Backend ép 'pending' bất kể client gửi gì — người vẽ không tự duyệt.
@@ -101,12 +100,34 @@ export async function createPlot(body: CreateThuaDatBody): Promise<ThuaDat> {
   }
 
   // Backend chỉ nhận đúng 4 field; gửi thêm areaHa/status/zoneId bị bỏ im lặng.
-  const { data } = await client.post<ThuaDat>('/growing-areas/plots', {
-    partyId: body.partyId,
+  const payload: Record<string, unknown> = {
     boundary: body.boundary,
     cropName: body.cropName,
     note: body.note,
-  });
+  };
+  // Backend thật BẮT BUỘC partyId (400 nếu thiếu) — chỉ đính khi có. Thửa không
+  // hộ là hành vi mock; nối thật thì phải nới `service.createPlot`.
+  if (body.partyId) payload.partyId = body.partyId;
+  const { data } = await client.post<ThuaDat>('/growing-areas/plots', payload);
+  return data;
+}
+
+/**
+ * Gán (hoặc đổi) nông hộ cho một thửa đã có — "gán sau" khi lúc tạo bỏ trống.
+ *
+ * Backend thật: `PATCH /growing-areas/plots/:id` nhận `partyId`, nhưng MỌI patch
+ * reset thửa về `pending`. Mock giữ nguyên status cho đỡ bất ngờ khi demo.
+ */
+export async function ganNongHoChoThua(plotId: string, partyId: string): Promise<ThuaDat> {
+  if (!partyId) throw new MockApiError('Chọn nông hộ để gán.', 'thieu_party', 400);
+  if (MOCK_API) {
+    await new Promise((r) => setTimeout(r, MOCK_DELAY));
+    const thua = MOCK_THUA_DAT.find((p) => p.id === plotId);
+    if (!thua) throw new MockApiError('Không tìm thấy thửa.', 'khong_thay', 404);
+    thua.partyId = partyId;
+    return thua;
+  }
+  const { data } = await client.patch<ThuaDat>(`/growing-areas/plots/${plotId}`, { partyId });
   return data;
 }
 
@@ -145,11 +166,10 @@ export async function timThuaTheoToaDo(lat: number, lng: number): Promise<KetQua
     ...trungRaw.map((p) => p.partyId),
     ...ganRaw.map((x) => x.plot.partyId),
   ]);
-  const kemHo = (p: ThuaDat): ThuaDatKemHo => ({
-    ...p,
-    tenHo: parties[p.partyId]?.name,
-    dienThoaiHo: parties[p.partyId]?.phones?.[0],
-  });
+  const kemHo = (p: ThuaDat): ThuaDatKemHo => {
+    const ho = p.partyId ? parties[p.partyId] : undefined;
+    return { ...p, tenHo: ho?.name, dienThoaiHo: ho?.phones?.[0] };
+  };
 
   return {
     trung: trungRaw.map(kemHo),

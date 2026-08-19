@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { getPlot } from '../../src/api/erp/growing-areas';
+import { getPlot, ganNongHoChoThua } from '../../src/api/erp/growing-areas';
 import { listMocDaXacNhan, xacNhanMoc, huyXacNhanMoc } from '../../src/api/erp/canh-tac';
 import { listNhatKy } from '../../src/api/erp/nhat-ky';
 import { apiErrorMessage } from '../../src/api/client';
@@ -23,6 +23,15 @@ import { Input } from '../../src/components/Input';
 import { DateField } from '../../src/components/DateField';
 import { ErrorState } from '../../src/components/ErrorState';
 import { TimelineCanhTac } from '../../src/features/den-thua/components/TimelineCanhTac';
+import { BanDoRanh } from '../../src/features/den-thua/components/BanDoRanh';
+import { RanhThuaPreview } from '../../src/features/den-thua/components/RanhThuaPreview';
+import {
+  ChonNongHo,
+  giaiQuyetHo,
+  hoHopLe,
+  type KetQuaChonHo,
+} from '../../src/features/den-thua/components/ChonNongHo';
+import { centroid } from '../../src/features/den-thua/geo';
 import { LOAI_NHAT_KY_META } from '../../src/features/den-thua/components/LoaiNhatKyChips';
 import {
   chiSoMocHienTai,
@@ -51,6 +60,9 @@ export default function ChiTietThua() {
   const [mocDangMo, setMocDangMo] = useState<MocCanhTac | null>(null);
   const [ngayNhap, setNgayNhap] = useState<string | undefined>();
   const [ghiChuNhap, setGhiChuNhap] = useState('');
+  const [mapLoi, setMapLoi] = useState<string | null>(null);
+  const [ganMo, setGanMo] = useState(false);
+  const [hoKq, setHoKq] = useState<KetQuaChonHo>({ loai: 'chon', party: null });
 
   const thuaQuery = useQuery({
     queryKey: ['thua', plotId],
@@ -109,6 +121,23 @@ export default function ChiTietThua() {
     onError: (err) => Alert.alert('Lỗi', apiErrorMessage(err)),
   });
 
+  // Gán (hoặc tạo mới rồi gán) nông hộ cho thửa chưa có hộ — "gán sau".
+  const ganHo = useMutation({
+    mutationFn: async () => {
+      const c = thua?.boundary ? centroid(thua.boundary) : null;
+      const partyId = await giaiQuyetHo(hoKq, { lat: c?.[1], lng: c?.[0] });
+      if (!partyId) throw new Error('Chọn hoặc tạo nông hộ để gán.');
+      return ganNongHoChoThua(plotId, partyId);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['thua', plotId] });
+      qc.invalidateQueries({ queryKey: ['do-thua'] });
+      setGanMo(false);
+      setHoKq({ loai: 'chon', party: null });
+    },
+    onError: (err) => Alert.alert('Chưa gán được', apiErrorMessage(err)),
+  });
+
   const moSheet = (m: MocCanhTac) => {
     setMocDangMo(m);
     setNgayNhap(isoNgay(m.ngayThucTe ?? m.ngayDuKien));
@@ -161,7 +190,10 @@ export default function ChiTietThua() {
             {thua.cropName ? (
               <View className="flex-row items-center mr-3">
                 <Ionicons name="leaf-outline" size={14} color="#166534" />
-                <Text className="text-caption text-ink ml-1">{thua.cropName}</Text>
+                <Text className="text-caption text-ink ml-1">
+                  {thua.cropName}
+                  {thua.cropXen ? ` · xen ${thua.cropXen}` : ''}
+                </Text>
               </View>
             ) : null}
             <View className="flex-row items-center mr-3">
@@ -183,6 +215,42 @@ export default function ChiTietThua() {
             </Text>
           ) : null}
         </View>
+
+        {/* Chưa gán nông hộ → gán sau ngay tại đây */}
+        {!thua.partyId ? (
+          <View className="rounded-card bg-amber-50 border border-amber-200 p-4 mb-4">
+            <View className="flex-row items-start">
+              <Ionicons name="person-add-outline" size={20} color="#92400e" />
+              <View className="ml-2 flex-1">
+                <Text className="text-body text-amber-900 font-semibold">Chưa gán nông hộ</Text>
+                <Text className="text-small text-amber-900 mt-0.5">
+                  Thửa này chưa gắn hộ nào. Gán để ghi nhật ký, bán vật tư cho hộ.
+                </Text>
+              </View>
+            </View>
+            <View className="mt-3">
+              <Button label="Gán nông hộ" onPress={() => setGanMo(true)} />
+            </View>
+          </View>
+        ) : null}
+
+        {/* Ranh thửa trên ảnh vệ tinh — SVG là fallback khi không tải được bản đồ */}
+        {thua.boundary && thua.boundary.length >= 3 ? (
+          <View className="rounded-card bg-white border border-border p-4 mb-4">
+            <Text className="text-caption text-ink-muted uppercase mb-2">Ranh thửa</Text>
+            {mapLoi ? (
+              <RanhThuaPreview ring={thua.boundary} />
+            ) : (
+              <BanDoRanh
+                mode="xem"
+                ring={thua.boundary}
+                initialCenter={centroid(thua.boundary)}
+                onMapError={setMapLoi}
+                height={260}
+              />
+            )}
+          </View>
+        ) : null}
 
         {/* Timeline canh tác */}
         <View className="rounded-card bg-white border border-border p-4 mb-4">
@@ -236,12 +304,18 @@ export default function ChiTietThua() {
 
         <Button
           label="Ghi nhật ký canh tác"
+          disabled={!thua.partyId}
           onPress={() =>
             router.push(
               `/thua/nhat-ky?plotId=${thua.id}&partyId=${thua.partyId}&tenHo=${encodeURIComponent(thua.tenHo ?? '')}` as never,
             )
           }
         />
+        {!thua.partyId ? (
+          <Text className="text-small text-ink-muted text-center mt-2">
+            Gán nông hộ trước khi ghi nhật ký.
+          </Text>
+        ) : null}
       </ScrollView>
 
       {/* Sheet xác nhận mốc */}
@@ -256,77 +330,126 @@ export default function ChiTietThua() {
           className="flex-1 justify-end bg-black/40"
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <View className="bg-white rounded-t-frame p-4 pb-6">
-            <View className="items-center mb-2">
-              <View className="h-1 w-12 bg-neutral-300 rounded-full" />
-            </View>
-            <Text className="text-h2 text-ink">{mocDangMo?.nhan}</Text>
-            <Text className="text-caption text-ink-muted mt-1 mb-3">
-              Dự kiến {mocDangMo ? formatDate(mocDangMo.ngayDuKien) : ''}
-            </Text>
-
-            {mocTuongLai ? (
-              <View className="rounded-input bg-neutral-100 p-3 mb-3">
-                <Text className="text-caption text-ink-muted">
-                  Mốc này chưa tới hạn nên chưa xác nhận được. Quay lại khi đã làm xong.
-                </Text>
+          {/* ScrollView vì khi date picker bung ra, sheet cao thêm ~230 px —
+              máy nhỏ sẽ tràn nếu để View cứng. */}
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
+            showsVerticalScrollIndicator={false}
+          >
+            <View className="bg-white rounded-t-frame p-4 pb-6">
+              <View className="items-center mb-2">
+                <View className="h-1 w-12 bg-neutral-300 rounded-full" />
               </View>
-            ) : (
-              <>
-                <DateField
-                  label="Thực tế xảy ra ngày"
-                  value={ngayNhap}
-                  onChange={setNgayNhap}
-                  maximumDate={new Date()}
-                />
-                {lechXem != null && lechXem !== 0 ? (
-                  <Text
-                    className={`text-small -mt-2 mb-2 ${
-                      lechXem > 0 ? 'text-amber-800' : 'text-green-700'
-                    }`}
-                  >
-                    {lechXem > 0
-                      ? `Muộn ${lechXem} ngày so với lịch`
-                      : `Sớm ${-lechXem} ngày so với lịch`}
+              <Text className="text-h2 text-ink">{mocDangMo?.nhan}</Text>
+              <Text className="text-caption text-ink-muted mt-1 mb-3">
+                Dự kiến {mocDangMo ? formatDate(mocDangMo.ngayDuKien) : ''}
+              </Text>
+
+              {mocTuongLai ? (
+                <View className="rounded-input bg-neutral-100 p-3 mb-3">
+                  <Text className="text-caption text-ink-muted">
+                    Mốc này chưa tới hạn nên chưa xác nhận được. Quay lại khi đã làm xong.
                   </Text>
-                ) : null}
-                <Input
-                  label="Ghi chú"
-                  placeholder="Ví dụ: mưa kéo dài nên thu muộn"
-                  multiline
-                  numberOfLines={3}
-                  value={ghiChuNhap}
-                  onChangeText={setGhiChuNhap}
-                />
-              </>
-            )}
-
-            <View className="flex-row gap-2 mt-1">
-              <View className="flex-1">
-                <Button label="Đóng" variant="secondary" onPress={dongSheet} />
-              </View>
-              {!mocTuongLai ? (
-                <View className="flex-1">
-                  <Button
-                    label={mocDangMo?.ngayThucTe ? 'Cập nhật' : 'Xác nhận'}
-                    loading={luuMoc.isPending}
-                    disabled={!ngayNhap || luuMoc.isPending}
-                    onPress={() => luuMoc.mutate()}
-                  />
                 </View>
+              ) : (
+                <>
+                  <DateField
+                    label="Thực tế xảy ra ngày"
+                    value={ngayNhap}
+                    onChange={setNgayNhap}
+                    maximumDate={new Date()}
+                  />
+                  {lechXem != null && lechXem !== 0 ? (
+                    <Text
+                      className={`text-small -mt-2 mb-2 ${
+                        lechXem > 0 ? 'text-amber-800' : 'text-green-700'
+                      }`}
+                    >
+                      {lechXem > 0
+                        ? `Muộn ${lechXem} ngày so với lịch`
+                        : `Sớm ${-lechXem} ngày so với lịch`}
+                    </Text>
+                  ) : null}
+                  <Input
+                    label="Ghi chú"
+                    placeholder="Ví dụ: mưa kéo dài nên thu muộn"
+                    multiline
+                    numberOfLines={3}
+                    value={ghiChuNhap}
+                    onChangeText={setGhiChuNhap}
+                  />
+                </>
+              )}
+
+              <View className="flex-row gap-2 mt-1">
+                <View className="flex-1">
+                  <Button label="Đóng" variant="secondary" onPress={dongSheet} />
+                </View>
+                {!mocTuongLai ? (
+                  <View className="flex-1">
+                    <Button
+                      label={mocDangMo?.ngayThucTe ? 'Cập nhật' : 'Xác nhận'}
+                      loading={luuMoc.isPending}
+                      disabled={!ngayNhap || luuMoc.isPending}
+                      onPress={() => luuMoc.mutate()}
+                    />
+                  </View>
+                ) : null}
+              </View>
+
+              {mocDangMo?.ngayThucTe ? (
+                <Pressable
+                  onPress={() => boMoc.mutate()}
+                  className="mt-3 items-center py-2"
+                  accessibilityRole="button"
+                >
+                  <Text className="text-caption text-red-700">Bỏ xác nhận mốc này</Text>
+                </Pressable>
               ) : null}
             </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
 
-            {mocDangMo?.ngayThucTe ? (
-              <Pressable
-                onPress={() => boMoc.mutate()}
-                className="mt-3 items-center py-2"
-                accessibilityRole="button"
-              >
-                <Text className="text-caption text-red-700">Bỏ xác nhận mốc này</Text>
-              </Pressable>
-            ) : null}
-          </View>
+      {/* Sheet gán nông hộ */}
+      <Modal
+        visible={ganMo}
+        transparent
+        statusBarTranslucent
+        animationType="slide"
+        onRequestClose={() => setGanMo(false)}
+      >
+        <KeyboardAvoidingView
+          className="flex-1 justify-end bg-black/40"
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
+            showsVerticalScrollIndicator={false}
+          >
+            <View className="bg-white rounded-t-frame p-4 pb-6">
+              <View className="items-center mb-2">
+                <View className="h-1 w-12 bg-neutral-300 rounded-full" />
+              </View>
+              <Text className="text-h2 text-ink mb-3">Gán nông hộ</Text>
+              <ChonNongHo giaTri={hoKq} onChange={setHoKq} />
+              <View className="flex-row gap-2 mt-3">
+                <View className="flex-1">
+                  <Button label="Đóng" variant="secondary" onPress={() => setGanMo(false)} />
+                </View>
+                <View className="flex-1">
+                  <Button
+                    label="Gán"
+                    loading={ganHo.isPending}
+                    disabled={!hoHopLe(hoKq) || ganHo.isPending}
+                    onPress={() => ganHo.mutate()}
+                  />
+                </View>
+              </View>
+            </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
