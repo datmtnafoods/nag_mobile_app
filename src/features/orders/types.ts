@@ -30,12 +30,29 @@ export type SeedProduct = {
   nurseryIds: string[];
 };
 
+/** Loại đối tác — mirror CHECK constraint `party.kind` ở backend. */
+export type PartyKind =
+  | 'household'
+  | 'cooperative'
+  | 'distributor'
+  | 'dealer'
+  | 'buyer'
+  | 'supplier';
+
 export type Party = {
   id: string;
   name: string;
   phones: string[];
+  /** Enum 7 tỉnh dùng cho luồng đơn hàng (bảng giá trị CŨ, trước sáp nhập). */
   province?: Province;
   address?: string;
+  // ─ Các field dưới mirror cột đã có ở bảng `party` backend, dùng cho luồng
+  //   nông hộ / đến ruộng. Địa giới từ geocode là chuỗi tự do SAU sáp nhập
+  //   1/7/2025 nên gộp vào `address`, không nhét vào enum `province` ở trên.
+  kind?: PartyKind;
+  commune?: string;
+  lat?: number;
+  lng?: number;
 };
 
 export type OrderLine = {

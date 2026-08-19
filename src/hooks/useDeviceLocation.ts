@@ -7,6 +7,12 @@ type Options = {
   auto?: boolean;
   /** Bỏ cuộc sau bao lâu (ms). GPS trong nhà có thể treo rất lâu. */
   timeoutMs?: number;
+  /**
+   * Độ chính xác. `Balanced` (~100 m) đủ cho toạ độ đính phiếu, nhưng KHÔNG đủ
+   * để dò thửa đất — thửa vài sào chỉ ~30–60 m cạnh, sai số 100 m là dò trượt
+   * hoàn toàn. Màn "đến ruộng" phải truyền `Location.Accuracy.High`.
+   */
+  accuracy?: Location.Accuracy;
 };
 
 const DEFAULT_TIMEOUT = 8000;
@@ -16,7 +22,11 @@ const DEFAULT_TIMEOUT = 8000;
  * "Pattern B im lặng" giống `features/vat-tu/anh.ts`: thiếu quyền thì trả null,
  * KHÔNG gate màn hình, KHÔNG Alert — người gọi tự quyết hiển thị.
  */
-export function useDeviceLocation({ auto = false, timeoutMs = DEFAULT_TIMEOUT }: Options = {}) {
+export function useDeviceLocation({
+  auto = false,
+  timeoutMs = DEFAULT_TIMEOUT,
+  accuracy = Location.Accuracy.Balanced,
+}: Options = {}) {
   const [state, setState] = useState<ViTriState>('idle');
   const [viTri, setViTri] = useState<ViTri | null>(null);
   const [loi, setLoi] = useState<string | null>(null);
@@ -55,7 +65,7 @@ export function useDeviceLocation({ auto = false, timeoutMs = DEFAULT_TIMEOUT }:
       // getCurrentPositionAsync không có timeout riêng — tự đua với đồng hồ để
       // không treo wizard khi ở trong kho kín không bắt được vệ tinh.
       const pos = await Promise.race([
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        Location.getCurrentPositionAsync({ accuracy }),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
       ]);
 
@@ -87,7 +97,7 @@ export function useDeviceLocation({ auto = false, timeoutMs = DEFAULT_TIMEOUT }:
     } finally {
       inFlightRef.current = false;
     }
-  }, [timeoutMs]);
+  }, [timeoutMs, accuracy]);
 
   useEffect(() => {
     if (!auto) return;

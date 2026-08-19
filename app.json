@@ -58,7 +58,13 @@
           "isAndroidBackgroundLocationEnabled": false
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "NaGreen cần micro để ghi âm ghi chú nhật ký canh tác tại ruộng."
+        }
+      ]
     ]
   }
 }
