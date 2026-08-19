@@ -20,10 +20,22 @@ import { reverseGeocode, ghepDiaChi } from '../../src/api/erp/geocode';
 import { apiErrorMessage } from '../../src/api/client';
 import { Button } from '../../src/components/Button';
 import { Input } from '../../src/components/Input';
+import { DateField } from '../../src/components/DateField';
 import { EmptyState } from '../../src/components/EmptyState';
 import { DiaChiField } from '../../src/features/location/components/DiaChiField';
 import { DienTichInput } from '../../src/features/den-thua/components/DienTichInput';
-import { doiRaM2, oVuongTuDiem, type DonViDienTich } from '../../src/features/den-thua/geo';
+import {
+  doiRaM2,
+  khoangCachM,
+  oVuongTuDiem,
+  tuCat,
+  type DonViDienTich,
+  type Ring,
+} from '../../src/features/den-thua/geo';
+import { RanhThuaPreview } from '../../src/features/den-thua/components/RanhThuaPreview';
+
+/** Cùng ngưỡng với màn dò thửa — ghim đỉnh lệch quá mức thì cả ranh vô nghĩa. */
+const NGUONG_SAI_SO_M = 50;
 import { useDeviceLocation } from '../../src/hooks/useDeviceLocation';
 import type { Party } from '../../src/features/orders/types';
 
@@ -53,9 +65,24 @@ export default function TaoThua() {
   const [loiHo, setLoiHo] = useState<string | null>(null);
 
   // ─ Bước 2: thửa đất
+  /**
+   * 'ghim_goc' = KTV đi từng góc bấm ghim, ranh thật.
+   * 'nhanh'    = ghim 1 điểm + khai diện tích, app sinh ô vuông — lối thoát cho
+   *              vườn rậm/có hàng rào/KTV vội. Ranh chỉ là ước lượng.
+   */
+  const [cheDo, setCheDo] = useState<'ghim_goc' | 'nhanh'>('ghim_goc');
+  const [dinh, setDinh] = useState<Array<{ lat: number; lng: number; saiSo?: number }>>([]);
+  const [loiGhim, setLoiGhim] = useState<string | null>(null);
+  const [dangGhim, setDangGhim] = useState(false);
+
   const [dienTich, setDienTich] = useState(3);
   const [donVi, setDonVi] = useState<DonViDienTich>('sao');
   const [cayTrong, setCayTrong] = useState('');
+  // Mốc gốc của timeline canh tác. Mặc định hôm nay, nhưng vườn đã trồng lâu thì
+  // KTV phải chỉnh lại — không thì lịch lệch cả năm.
+  const [ngayGoc, setNgayGoc] = useState<string | undefined>(
+    () => new Date().toISOString().slice(0, 10),
+  );
   const [ghiChu, setGhiChu] = useState('');
 
   const timQuery = useQuery({
@@ -91,14 +118,32 @@ export default function TaoThua() {
         partyId = ho.id;
       }
 
-      const m2 = doiRaM2(dienTich, donVi);
-      if (!(m2 > 0)) throw new Error('Nhập diện tích lớn hơn 0.');
+      let boundary: Ring;
+      let note = ghiChu.trim();
+
+      if (cheDo === 'ghim_goc') {
+        if (dinh.length < 3) throw new Error('Cần ít nhất 3 góc để tạo ranh thửa.');
+        boundary = dinh.map((d) => [d.lng, d.lat] as [number, number]);
+        if (tuCat(boundary)) {
+          throw new Error('Ranh bị xoắn — kiểm tra lại thứ tự các góc đã ghim.');
+        }
+      } else {
+        const m2 = doiRaM2(dienTich, donVi);
+        if (!(m2 > 0)) throw new Error('Nhập diện tích lớn hơn 0.');
+        boundary = oVuongTuDiem(lat, lng, m2);
+        // Backend không có cột đánh dấu chất lượng ranh — dùng tiền tố trong
+        // `note` để văn phòng lọc ra thửa cần đo lại. Khi backend thêm cột
+        // `ranhChinhXac` thì migrate theo tiền tố này.
+        const nhan = `[Ranh ước lượng: ghim 1 điểm, khai ${dienTich} ${donVi === 'sao' ? 'sào' : donVi === 'ha' ? 'ha' : 'm²'}]`;
+        note = note ? `${nhan} ${note}` : nhan;
+      }
 
       return createPlot({
         partyId,
-        boundary: oVuongTuDiem(lat, lng, m2),
+        boundary,
         cropName: cayTrong.trim() || undefined,
-        note: ghiChu.trim() || undefined,
+        ngayGoc: ngayGoc ? new Date(ngayGoc).toISOString() : undefined,
+        note: note || undefined,
       });
     },
     onSuccess: (thua) => {
@@ -125,11 +170,51 @@ export default function TaoThua() {
   const coToaDo = lat !== 0 && lng !== 0;
   const buoc1Xong = Boolean(hoDaChon) || (taoHoMoi && tenHo.trim().length >= 2);
 
+  const ring: Ring = dinh.map((d) => [d.lng, d.lat] as [number, number]);
+  const ranhXoan = dinh.length >= 4 && tuCat(ring);
+  const buoc2Xong =
+    cheDo === 'ghim_goc' ? dinh.length >= 3 && !ranhXoan : coToaDo && dienTich > 0;
+
   const doLaiViTri = async () => {
     const vt = await layViTri();
     if (vt) {
       setLat(vt.lat);
       setLng(vt.lng);
+    }
+  };
+
+  /**
+   * Ghim một góc thửa. Chặn khi GPS kém — đỉnh lệch 100 m thì cả thửa sai, thà
+   * bắt KTV đợi vài giây còn hơn lưu ranh vô nghĩa.
+   */
+  const ghimGoc = async () => {
+    setLoiGhim(null);
+    setDangGhim(true);
+    try {
+      const vt = await layViTri();
+      if (!vt) {
+        setLoiGhim('Chưa lấy được vị trí. Ra chỗ thoáng rồi thử lại.');
+        return;
+      }
+      if (vt.doChinhXac != null && vt.doChinhXac > NGUONG_SAI_SO_M) {
+        setLoiGhim(
+          `Sai số ±${Math.round(vt.doChinhXac)} m, quá lớn để ghim góc. Đợi vài giây hoặc ra chỗ thoáng.`,
+        );
+        return;
+      }
+      const truoc = dinh[dinh.length - 1];
+      if (truoc && khoangCachM(truoc, vt) < 5) {
+        setLoiGhim('Góc này quá gần góc trước (dưới 5 m) — đã đi tới góc kế chưa?');
+        return;
+      }
+      setDinh((ds) => [...ds, { lat: vt.lat, lng: vt.lng, saiSo: vt.doChinhXac }]);
+      // Đỉnh đầu cũng là điểm neo cho geocode + cho chế độ nhanh nếu đổi qua.
+      if (dinh.length === 0) {
+        setLat(vt.lat);
+        setLng(vt.lng);
+      }
+    } finally {
+      setDangGhim(false);
     }
   };
 
@@ -316,43 +401,144 @@ export default function TaoThua() {
             </>
           ) : (
             <>
-              {/* Toạ độ ghim */}
-              <View className="rounded-card bg-white border border-border p-4 mb-4">
-                <Text className="text-caption text-ink-muted uppercase mb-2">Điểm ghim</Text>
-                {coToaDo ? (
-                  <>
-                    <Text className="text-body text-ink font-mono">
-                      {lat.toFixed(5)}, {lng.toFixed(5)}
-                    </Text>
-                    {diaChiQuery.data ? (
-                      <Text className="text-caption text-ink-muted mt-1">
-                        {diaChiQuery.data}
-                      </Text>
-                    ) : null}
-                  </>
-                ) : (
-                  <Text className="text-caption text-amber-800">Chưa có toạ độ.</Text>
-                )}
-                <View className="mt-3">
-                  <Button
-                    label={gpsState === 'dang-lay' ? 'Đang đo…' : 'Đo lại tại chỗ'}
-                    variant="secondary"
-                    disabled={gpsState === 'dang-lay'}
-                    onPress={doLaiViTri}
-                  />
-                </View>
+              {/* Chọn cách lấy ranh */}
+              <View className="flex-row mb-3">
+                <Pressable
+                  onPress={() => setCheDo('ghim_goc')}
+                  className={`flex-1 h-11 rounded-input items-center justify-center border mr-2 ${
+                    cheDo === 'ghim_goc' ? 'bg-primary border-primary' : 'bg-white border-border'
+                  }`}
+                >
+                  <Text
+                    className={`text-caption font-semibold ${
+                      cheDo === 'ghim_goc' ? 'text-white' : 'text-ink'
+                    }`}
+                  >
+                    Ghim từng góc
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setCheDo('nhanh')}
+                  className={`flex-1 h-11 rounded-input items-center justify-center border ${
+                    cheDo === 'nhanh' ? 'bg-primary border-primary' : 'bg-white border-border'
+                  }`}
+                >
+                  <Text
+                    className={`text-caption font-semibold ${
+                      cheDo === 'nhanh' ? 'text-white' : 'text-ink'
+                    }`}
+                  >
+                    Nhanh (ước lượng)
+                  </Text>
+                </Pressable>
               </View>
 
-              <View className="rounded-card bg-white border border-border p-4 mb-4">
-                <DienTichInput
-                  soLuong={dienTich}
-                  donVi={donVi}
-                  onChange={({ soLuong, donVi: dv }) => {
-                    setDienTich(soLuong);
-                    setDonVi(dv);
-                  }}
-                />
-              </View>
+              {cheDo === 'ghim_goc' ? (
+                <View className="rounded-card bg-white border border-border p-4 mb-4">
+                  <Text className="text-caption text-ink-muted uppercase mb-2">Ranh thửa</Text>
+
+                  <RanhThuaPreview ring={ring} />
+
+                  {ranhXoan ? (
+                    <View className="rounded-input bg-red-50 border border-red-200 p-3 mt-3 flex-row">
+                      <Ionicons name="warning" size={18} color="#b91c1c" />
+                      <Text className="text-small text-red-700 ml-2 flex-1">
+                        Ranh bị xoắn — có thể ghim nhầm thứ tự góc. Đi theo vòng quanh thửa,
+                        đừng nhảy chéo sang góc đối diện.
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  <View className="mt-3">
+                    <Button
+                      label={
+                        dangGhim || gpsState === 'dang-lay'
+                          ? 'Đang đo vị trí…'
+                          : `Ghim góc ${dinh.length + 1}`
+                      }
+                      loading={dangGhim || gpsState === 'dang-lay'}
+                      disabled={dangGhim || gpsState === 'dang-lay'}
+                      onPress={ghimGoc}
+                    />
+                  </View>
+
+                  {loiGhim ? (
+                    <Text className="text-small text-amber-800 mt-2">{loiGhim}</Text>
+                  ) : (
+                    <Text className="text-small text-ink-muted mt-2">
+                      Đi tới từng góc vườn rồi bấm. Cần ít nhất 3 góc.
+                    </Text>
+                  )}
+
+                  {dinh.length > 0 ? (
+                    <View className="mt-3 pt-3 border-t border-border">
+                      {dinh.map((d, i) => (
+                        <View
+                          key={`${d.lat}-${d.lng}-${i}`}
+                          className="flex-row items-center py-1.5"
+                        >
+                          <View className="h-6 w-6 rounded-full bg-primary items-center justify-center mr-2">
+                            <Text className="text-small text-white font-semibold">{i + 1}</Text>
+                          </View>
+                          <Text className="text-caption text-ink font-mono flex-1">
+                            {d.lat.toFixed(5)}, {d.lng.toFixed(5)}
+                            {d.saiSo != null ? ` · ±${Math.round(d.saiSo)} m` : ''}
+                          </Text>
+                          <Pressable
+                            onPress={() => setDinh((ds) => ds.filter((_, j) => j !== i))}
+                            hitSlop={8}
+                            className="p-1"
+                            accessibilityRole="button"
+                            accessibilityLabel={`Xoá góc ${i + 1}`}
+                          >
+                            <Ionicons name="close-circle" size={18} color="#b91c1c" />
+                          </Pressable>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              ) : (
+                <>
+                  {/* Toạ độ ghim */}
+                  <View className="rounded-card bg-white border border-border p-4 mb-4">
+                    <Text className="text-caption text-ink-muted uppercase mb-2">Điểm ghim</Text>
+                    {coToaDo ? (
+                      <>
+                        <Text className="text-body text-ink font-mono">
+                          {lat.toFixed(5)}, {lng.toFixed(5)}
+                        </Text>
+                        {diaChiQuery.data ? (
+                          <Text className="text-caption text-ink-muted mt-1">
+                            {diaChiQuery.data}
+                          </Text>
+                        ) : null}
+                      </>
+                    ) : (
+                      <Text className="text-caption text-amber-800">Chưa có toạ độ.</Text>
+                    )}
+                    <View className="mt-3">
+                      <Button
+                        label={gpsState === 'dang-lay' ? 'Đang đo…' : 'Đo lại tại chỗ'}
+                        variant="secondary"
+                        disabled={gpsState === 'dang-lay'}
+                        onPress={doLaiViTri}
+                      />
+                    </View>
+                  </View>
+
+                  <View className="rounded-card bg-white border border-border p-4 mb-4">
+                    <DienTichInput
+                      soLuong={dienTich}
+                      donVi={donVi}
+                      onChange={({ soLuong, donVi: dv }) => {
+                        setDienTich(soLuong);
+                        setDonVi(dv);
+                      }}
+                    />
+                  </View>
+                </>
+              )}
 
               <View className="rounded-card bg-white border border-border p-4 mb-4">
                 <Input
@@ -361,6 +547,15 @@ export default function TaoThua() {
                   value={cayTrong}
                   onChangeText={setCayTrong}
                 />
+                <DateField
+                  label="Ngày kích hoạt / bắt đầu trồng"
+                  value={ngayGoc}
+                  onChange={setNgayGoc}
+                  maximumDate={new Date()}
+                />
+                <Text className="text-small text-ink-muted -mt-2 mb-3">
+                  Lịch canh tác tính từ ngày này. Vườn đã trồng lâu thì chỉnh lại cho đúng.
+                </Text>
                 <Input
                   label="Ghi chú"
                   placeholder="Đặc điểm nhận biết, đường vào…"
@@ -371,13 +566,15 @@ export default function TaoThua() {
                 />
               </View>
 
-              <View className="rounded-card bg-amber-50 border border-amber-200 p-3 flex-row">
-                <Ionicons name="information-circle-outline" size={18} color="#92400e" />
-                <Text className="text-small text-amber-900 ml-2 flex-1">
-                  Ranh thửa là ô vuông ước lượng quanh điểm ghim, không phải ranh đo đạc. Văn
-                  phòng sẽ chỉnh lại chính xác trên web sau.
-                </Text>
-              </View>
+              {cheDo === 'nhanh' ? (
+                <View className="rounded-card bg-amber-50 border border-amber-200 p-3 flex-row">
+                  <Ionicons name="information-circle-outline" size={18} color="#92400e" />
+                  <Text className="text-small text-amber-900 ml-2 flex-1">
+                    Ranh thửa là ô vuông ước lượng quanh điểm ghim, không phải ranh đo đạc.
+                    Thửa sẽ được đánh dấu để văn phòng biết cần đo lại.
+                  </Text>
+                </View>
+              ) : null}
             </>
           )}
         </ScrollView>
@@ -399,7 +596,7 @@ export default function TaoThua() {
               <Button
                 label="Lưu thửa đất"
                 loading={luu.isPending}
-                disabled={!coToaDo || luu.isPending}
+                disabled={!buoc2Xong || luu.isPending}
                 onPress={() => luu.mutate()}
               />
             )}

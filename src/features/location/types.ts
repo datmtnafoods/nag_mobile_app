@@ -19,6 +19,12 @@ export interface DiaChiGeocode {
   detail: string;
   lat: number;
   lng: number;
+  /**
+   * Địa chỉ này lấy được từ đâu. Backend KHÔNG trả field này — client tự gắn.
+   * `mock` = đoán theo dải vĩ độ, phải nói rõ với người dùng để họ không tưởng
+   * là số liệu thật.
+   */
+  nguon?: 'backend' | 'mock';
 }
 
 export interface GoiYDiaChi {

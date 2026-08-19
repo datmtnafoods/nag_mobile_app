@@ -48,7 +48,10 @@ export default function DenThua() {
 
   const diaChiQuery = useQuery({
     queryKey: ['geocode', viTri?.lat, viTri?.lng],
-    queryFn: async () => ghepDiaChi(await reverseGeocode(viTri!.lat, viTri!.lng)),
+    queryFn: async () => {
+      const dc = await reverseGeocode(viTri!.lat, viTri!.lng);
+      return { chuoi: ghepDiaChi(dc), nguon: dc.nguon };
+    },
     enabled: viTri != null,
     staleTime: 60_000,
   });
@@ -99,13 +102,18 @@ export default function DenThua() {
                   color={gpsDuChinhXac ? '#166534' : '#92400e'}
                 />
                 <Text className="text-body text-ink font-semibold ml-2 flex-1">
-                  {diaChiQuery.data ?? 'Đang tra địa chỉ…'}
+                  {diaChiQuery.data?.chuoi ?? 'Đang tra địa chỉ…'}
                 </Text>
               </View>
               <Text className="text-caption text-ink-muted font-mono mt-1">
                 {viTri.lat.toFixed(5)}, {viTri.lng.toFixed(5)}
                 {saiSo != null ? ` · ±${Math.round(saiSo)} m` : ''}
               </Text>
+              {diaChiQuery.data?.nguon === 'mock' ? (
+                <Text className="text-small text-ink-soft mt-0.5">
+                  địa chỉ ước lượng — chưa nối máy chủ
+                </Text>
+              ) : null}
             </>
           ) : (
             <View className="flex-row items-center">
@@ -177,13 +185,13 @@ export default function DenThua() {
                   thua={t}
                   onPress={() =>
                     router.push(
-                      `/thua/nhat-ky?plotId=${t.id}&partyId=${t.partyId}&tenHo=${encodeURIComponent(t.tenHo ?? '')}` as never,
+                      `/thua/${t.id}` as never,
                     )
                   }
                 />
               ))}
               <Text className="text-small text-ink-muted mb-4">
-                Chạm vào thửa để ghi nhật ký canh tác.
+                Chạm vào thửa để xem lịch canh tác và ghi nhật ký.
               </Text>
             </>
           ) : (
@@ -227,7 +235,7 @@ export default function DenThua() {
                       khoangCachM={t.khoangCachM}
                       onPress={() =>
                         router.push(
-                          `/thua/nhat-ky?plotId=${t.id}&partyId=${t.partyId}&tenHo=${encodeURIComponent(t.tenHo ?? '')}` as never,
+                          `/thua/${t.id}` as never,
                         )
                       }
                     />

@@ -19,12 +19,26 @@ export type KetQuaGhiAm = {
  * SDK 54 dùng `expo-audio` (hook-based), KHÔNG phải `expo-av` — cái đó đã
  * deprecated và bị gỡ ở SDK 55.
  *
- * CỐ Ý KHÔNG dùng `useAudioRecorderState`: hook đó gọi `recorder.getStatus()`
- * ngay trong `useState` initializer (xem `expo-audio/build/ExpoAudio.js`), tức
- * là chạy ở render ĐẦU TIÊN — trước cả effect, trước `prepareToRecordAsync()`.
- * Lúc đó native recorder chưa tồn tại nên ném NativeSharedObjectNotFoundException
- * và làm vỡ cả màn hình. Thay bằng tự đếm giây, chỉ chạm vào `recorder` sau khi
- * đã prepare.
+ * CỐ Ý KHÔNG dùng `useAudioRecorderState`. Hook đó đọc `recorder.getStatus()`
+ * ngay trong thân render (`useState` initializer) và `recorder.id` trong dep
+ * array, KHÔNG có try/catch, không kiểm object còn sống. Chạm phải một shared
+ * object đã bị giải phóng là ném NativeSharedObjectNotFoundException ngay trong
+ * render → vỡ cả màn hình.
+ *
+ * Object bị giải phóng lúc nào: `useReleasingSharedObject` (expo-modules-core)
+ * gọi `release()` NGAY TRONG `useMemo` — tức trong pha render — mỗi khi dep
+ * array đổi. Mọi tham chiếu còn sót (closure trong callback, tick setInterval)
+ * sẽ ném ở lần đọc property kế tiếp. Riêng `setInterval` của
+ * `useAudioRecorderState` giữ recorder của lần render mà effect chạy: nếu object
+ * chết trước khi `clearInterval` kịp, tick sau ném trong timer callback, không
+ * ai bắt được.
+ *
+ * (Không phải "native recorder chưa tồn tại" — factory chạy đồng bộ ngay trong
+ * render đầu tiên nên object có trước cả effect. Tên
+ * NativeSharedObjectNotFoundException là đặc thù iOS; Android ném
+ * UsingReleasedSharedObjectException, khác tên cùng gốc.)
+ *
+ * Thay bằng tự đếm giây, chỉ chạm `recorder` trong callback sau khi đã prepare.
  *
  * Xin quyền theo "Pattern B im lặng" như `features/vat-tu/anh.ts`: từ chối thì
  * đổi state, KHÔNG Alert, KHÔNG gate màn hình. Ghi âm là tuỳ chọn — không micro

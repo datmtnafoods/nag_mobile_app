@@ -52,7 +52,11 @@ export function DiaChiField({
         return;
       }
       onChangeText(chuoi);
-      setHint('Đã điền xã/tỉnh — bổ sung số nhà, đường nếu có.');
+      setHint(
+        dc.nguon === 'mock'
+          ? 'Đã điền xã/tỉnh (ước lượng — chưa nối máy chủ). Bổ sung số nhà nếu có.'
+          : 'Đã điền xã/tỉnh — bổ sung số nhà, đường nếu có.',
+      );
     } catch (err) {
       setLoi(apiErrorMessage(err));
     } finally {

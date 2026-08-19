@@ -111,6 +111,55 @@ export function canhOVuong(dienTichM2: number): number {
   return Math.round(Math.sqrt(Math.max(0, dienTichM2)));
 }
 
+/** Chu vi (m) — cho KTV đối chiếu với cảm nhận thực địa. */
+export function chuViM(ring: Ring): number {
+  if (!Array.isArray(ring) || ring.length < 2) return 0;
+  let tong = 0;
+  for (let i = 0; i < ring.length; i += 1) {
+    const a = ring[i]!;
+    const b = ring[(i + 1) % ring.length]!;
+    tong += khoangCachM({ lat: a[1], lng: a[0] }, { lat: b[1], lng: b[0] });
+  }
+  return Math.round(tong);
+}
+
+/** Hai đoạn thẳng có cắt nhau không (không tính chạm ở đầu mút chung). */
+function doanCat(
+  p1: [number, number],
+  p2: [number, number],
+  p3: [number, number],
+  p4: [number, number],
+): boolean {
+  const d = (a: [number, number], b: [number, number], c: [number, number]) =>
+    (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const d1 = d(p3, p4, p1);
+  const d2 = d(p3, p4, p2);
+  const d3 = d(p1, p2, p3);
+  const d4 = d(p1, p2, p4);
+  return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+}
+
+/**
+ * Đa giác có tự cắt không.
+ *
+ * Đây là thứ đáng giá nhất khi KTV ghim góc ngoài thực địa: ghim nhầm thứ tự
+ * (nhảy chéo sang góc đối diện thay vì góc kề) sẽ cho hình xoắn, `areaHa` ra số
+ * vô nghĩa mà không ai biết. Kiểm mọi cặp cạnh không kề nhau — O(n²) nhưng
+ * n ≤ 6 nên không đáng lo.
+ */
+export function tuCat(ring: Ring): boolean {
+  const n = ring.length;
+  if (n < 4) return false; // tam giác không thể tự cắt
+  for (let i = 0; i < n; i += 1) {
+    for (let j = i + 1; j < n; j += 1) {
+      // Bỏ qua cạnh kề nhau (chung đỉnh) và cặp cạnh đầu–cuối.
+      if (j === i + 1 || (i === 0 && j === n - 1)) continue;
+      if (doanCat(ring[i]!, ring[(i + 1) % n]!, ring[j]!, ring[(j + 1) % n]!)) return true;
+    }
+  }
+  return false;
+}
+
 // ── Đơn vị diện tích ────────────────────────────────────────────────────────
 // "Sào" mỗi vùng một khác (Bắc Bộ 360 m², Trung Bộ 500 m², Nam Bộ/Tây Nguyên
 // 1.000 m²). Nafoods làm Tây Nguyên nên lấy 1.000, nhưng nhãn UI phải ghi rõ

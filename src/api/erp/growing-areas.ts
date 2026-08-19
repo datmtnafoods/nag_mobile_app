@@ -48,6 +48,25 @@ export async function listPlots(
   return data.rows ?? [];
 }
 
+/**
+ * Lấy một thửa kèm tên hộ.
+ *
+ * Backend KHÔNG có `GET /growing-areas/plots/:id` — chỉ có list. Nên phải tải
+ * list rồi lọc. Chấp nhận được vì dữ liệu nhỏ; khi backend thêm endpoint thì
+ * đổi đúng một chỗ này.
+ */
+export async function getPlot(id: string): Promise<ThuaDatKemHo | null> {
+  const plots = await listPlots();
+  const thua = plots.find((p) => p.id === id);
+  if (!thua) return null;
+  const parties = await getPartiesByIds([thua.partyId]);
+  return {
+    ...thua,
+    tenHo: parties[thua.partyId]?.name,
+    dienThoaiHo: parties[thua.partyId]?.phones?.[0],
+  };
+}
+
 export async function createPlot(body: CreateThuaDatBody): Promise<ThuaDat> {
   // Validate trước ở client — cùng luật với backend `validateRing`, để báo lỗi
   // tiếng Việt ngay tại form thay vì đợi 400 rồi mới biết.
@@ -74,6 +93,8 @@ export async function createPlot(body: CreateThuaDatBody): Promise<ThuaDat> {
       note: body.note?.trim() || null,
       createdBy: 'U-04',
       createdAt: new Date().toISOString(),
+      // Backend chưa có cột `planted_at` — mock giữ riêng để tính timeline.
+      ngayGoc: body.ngayGoc,
     };
     MOCK_THUA_DAT.push(thua);
     return thua;
