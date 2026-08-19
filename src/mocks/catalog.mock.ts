@@ -66,7 +66,7 @@ export const MOCK_PARTIES: Party[] = [
     province: 'lam_dong',
     address: 'Xã Lộc An, huyện Bảo Lâm',
   },
-  // Seed thêm cho luồng "đến ruộng" — có toạ độ + xã theo địa giới sau sáp nhập,
+  // Seed thêm cho luồng "đến thửa" — có toạ độ + xã theo địa giới sau sáp nhập,
   // để bước "chọn hộ có sẵn" và tìm theo số điện thoại có dữ liệu thật mà chạy.
   {
     id: 'p_004',

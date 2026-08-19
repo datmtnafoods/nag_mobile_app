@@ -10,7 +10,7 @@ type Options = {
   /**
    * Độ chính xác. `Balanced` (~100 m) đủ cho toạ độ đính phiếu, nhưng KHÔNG đủ
    * để dò thửa đất — thửa vài sào chỉ ~30–60 m cạnh, sai số 100 m là dò trượt
-   * hoàn toàn. Màn "đến ruộng" phải truyền `Location.Accuracy.High`.
+   * hoàn toàn. Màn "đến thửa" phải truyền `Location.Accuracy.High`.
    */
   accuracy?: Location.Accuracy;
 };

@@ -276,7 +276,7 @@ export default function Activation() {
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
                 label="Ghi chú (không bắt buộc)"
-                placeholder="Vị trí ruộng, đặc điểm..."
+                placeholder="Vị trí thửa, đặc điểm..."
                 leftIcon="document-text-outline"
                 multiline
                 numberOfLines={3}

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   useAudioRecorder,
-  useAudioRecorderState,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   RecordingPresets,
@@ -15,32 +14,52 @@ export type KetQuaGhiAm = {
 };
 
 /**
- * Ghi âm ghi chú tại ruộng.
+ * Ghi âm ghi chú tại thửa.
  *
  * SDK 54 dùng `expo-audio` (hook-based), KHÔNG phải `expo-av` — cái đó đã
  * deprecated và bị gỡ ở SDK 55.
  *
+ * CỐ Ý KHÔNG dùng `useAudioRecorderState`: hook đó gọi `recorder.getStatus()`
+ * ngay trong `useState` initializer (xem `expo-audio/build/ExpoAudio.js`), tức
+ * là chạy ở render ĐẦU TIÊN — trước cả effect, trước `prepareToRecordAsync()`.
+ * Lúc đó native recorder chưa tồn tại nên ném NativeSharedObjectNotFoundException
+ * và làm vỡ cả màn hình. Thay bằng tự đếm giây, chỉ chạm vào `recorder` sau khi
+ * đã prepare.
+ *
  * Xin quyền theo "Pattern B im lặng" như `features/vat-tu/anh.ts`: từ chối thì
- * trả null và đổi state, KHÔNG Alert, KHÔNG gate màn hình. Ghi âm là tuỳ chọn —
- * không micro thì vẫn ghi được nhật ký bằng ảnh và chữ.
+ * đổi state, KHÔNG Alert, KHÔNG gate màn hình. Ghi âm là tuỳ chọn — không micro
+ * thì vẫn ghi được nhật ký bằng ảnh và chữ.
  *
  * LƯU Ý khi nối backend: file ghi âm hiện chỉ nằm trên máy. Backend ĐANG CHẶN
  * CỨNG mọi `audio/*` ở `core/chat-media.js isAllowed()` nên chưa upload được.
  */
 export function useGhiAm() {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(recorder, 250);
 
   const [state, setState] = useState<GhiAmState>('idle');
   const [ketQua, setKetQua] = useState<KetQuaGhiAm | null>(null);
   const [loi, setLoi] = useState<string | null>(null);
   const [canAskAgain, setCanAskAgain] = useState(true);
-  const busyRef = useRef(false);
+  const [dangGhi, setDangGhi] = useState(false);
+  const [giayDangGhi, setGiayDangGhi] = useState(0);
 
-  const giayDangGhi = Math.floor((recorderState.durationMillis ?? 0) / 1000);
+  const busyRef = useRef(false);
+  /** Nguồn sự thật cho cleanup + callback — state đọc trong closure dễ bị cũ. */
+  const dangGhiRef = useRef(false);
+  const giayRef = useRef(0);
+
+  // Đếm giây bằng đồng hồ của mình, không hỏi native. Chỉ chạy khi đang thu.
+  useEffect(() => {
+    if (!dangGhi) return;
+    const t = setInterval(() => {
+      giayRef.current += 1;
+      setGiayDangGhi(giayRef.current);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [dangGhi]);
 
   const batDau = useCallback(async (): Promise<boolean> => {
-    if (busyRef.current) return false;
+    if (busyRef.current || dangGhiRef.current) return false;
     busyRef.current = true;
     setLoi(null);
     try {
@@ -51,15 +70,22 @@ export function useGhiAm() {
         return false;
       }
       setCanAskAgain(true);
-      // iOS mặc định không cho thu khi app ở chế độ playback — phải bật cờ này,
-      // nếu không `record()` im lặng không ghi được gì.
+      // iOS mặc định không cho thu khi phiên audio đang ở chế độ playback —
+      // thiếu cờ này thì `record()` im lặng không ghi được gì.
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
       recorder.record();
+
+      giayRef.current = 0;
+      setGiayDangGhi(0);
       setKetQua(null);
+      dangGhiRef.current = true;
+      setDangGhi(true);
       setState('dang-ghi');
       return true;
     } catch (err) {
+      dangGhiRef.current = false;
+      setDangGhi(false);
       setState('loi');
       setLoi(err instanceof Error ? err.message : 'Không bắt đầu ghi âm được');
       return false;
@@ -69,10 +95,13 @@ export function useGhiAm() {
   }, [recorder]);
 
   const dungLai = useCallback(async (): Promise<KetQuaGhiAm | null> => {
-    if (busyRef.current) return null;
+    if (busyRef.current || !dangGhiRef.current) return null;
     busyRef.current = true;
+    // Dừng đồng hồ trước, tránh nhảy thêm một giây trong lúc chờ stop().
+    dangGhiRef.current = false;
+    setDangGhi(false);
     try {
-      const giay = Math.max(1, Math.floor((recorder.currentTime ?? 0)));
+      const giay = Math.max(1, giayRef.current);
       await recorder.stop();
       const uri = recorder.uri;
       if (!uri) {
@@ -97,12 +126,19 @@ export function useGhiAm() {
     setKetQua(null);
     setState('idle');
     setLoi(null);
+    giayRef.current = 0;
+    setGiayDangGhi(0);
   }, []);
 
-  // Đang ghi mà rời màn thì dừng lại — tránh để mic mở nền.
+  // Rời màn giữa chừng thì dừng thu — không để mic mở nền.
+  // Đọc ref chứ không hỏi `recorder.isRecording`: lúc unmount, shared object có
+  // thể đã bị giải phóng và property getter sẽ ném.
   useEffect(() => {
     return () => {
-      if (recorder.isRecording) void recorder.stop().catch(() => {});
+      if (dangGhiRef.current) {
+        dangGhiRef.current = false;
+        void recorder.stop().catch(() => {});
+      }
     };
   }, [recorder]);
 
@@ -112,7 +148,7 @@ export function useGhiAm() {
     loi,
     canAskAgain,
     giayDangGhi,
-    dangGhi: recorderState.isRecording,
+    dangGhi,
     batDau,
     dungLai,
     xoa,

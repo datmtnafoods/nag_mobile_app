@@ -90,7 +90,7 @@ function nextPartyId(kind: PartyKind): string {
  *
  * BACKEND CHƯA CÓ ENDPOINT NÀY — `modules/party` cố ý chỉ có `repo.js`, không
  * `routes.js` (nông hộ hiện chỉ đẻ ra như tác dụng phụ của kích hoạt tem).
- * Mock dựng sẵn đầy đủ để luồng "đến ruộng" chạy được ngay; khi flip
+ * Mock dựng sẵn đầy đủ để luồng "đến thửa" chạy được ngay; khi flip
  * `MOCK_API=0` sẽ nhận 404 và người gọi phải bắt để báo cho người dùng.
  *
  * Ngoài ra `field_staff` theo RBAC mặc định KHÔNG có `party:create` — backend

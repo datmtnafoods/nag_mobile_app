@@ -16,10 +16,73 @@ function dinhDangGiay(s: number): string {
   return `${phut}:${String(giay).padStart(2, '0')}`;
 }
 
+/**
+ * Thanh nghe lại — TÁCH RIÊNG để `useAudioPlayer` chỉ chạy khi thật sự có file.
+ *
+ * Hook không được gọi có điều kiện, nên cách duy nhất giữ player khỏi tồn tại
+ * lúc chưa có bản ghi là tách component. Cũng tránh được nhịp release/create
+ * của shared object khi `uri` chuyển từ rỗng sang có.
+ */
+function NgheLaiGhiAm({
+  uri,
+  giay,
+  onXoa,
+}: {
+  uri: string;
+  giay: number;
+  onXoa: () => void;
+}) {
+  const player = useAudioPlayer({ uri });
+
+  return (
+    <View className="flex-row items-center rounded-input bg-green-100 px-3 py-2">
+      <Pressable
+        onPress={async () => {
+          if (player.playing) {
+            player.pause();
+            return;
+          }
+          // Tua về đầu trước khi phát — nghe xong lần một, bấm lại phải nghe
+          // lại từ đầu chứ không đứng im ở cuối file. `seekTo` là async nên
+          // phải đợi, không thì `play()` chạy trước khi tua xong.
+          try {
+            await player.seekTo(0);
+          } catch {
+            // Tua lỗi thì vẫn cho phát tiếp — thà nghe từ vị trí cũ còn hơn im.
+          }
+          player.play();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={player.playing ? 'Tạm dừng' : 'Nghe lại ghi âm'}
+        hitSlop={8}
+        className="mr-3"
+      >
+        <Ionicons
+          name={player.playing ? 'pause-circle' : 'play-circle'}
+          size={32}
+          color="#166534"
+        />
+      </Pressable>
+      <View className="flex-1">
+        <Text className="text-caption text-green-800 font-semibold">Đã ghi âm</Text>
+        <Text className="text-small text-green-800">{dinhDangGiay(giay)}</Text>
+      </View>
+      <Pressable
+        onPress={onXoa}
+        accessibilityRole="button"
+        accessibilityLabel="Xoá ghi âm"
+        hitSlop={8}
+        className="p-2"
+      >
+        <Ionicons name="trash-outline" size={20} color="#b91c1c" />
+      </Pressable>
+    </View>
+  );
+}
+
 /** Thu / nghe lại / xoá ghi âm cho nhật ký canh tác. */
 export function AudioRecorderRow({ uri, giay, onChange }: Props) {
   const { state, loi, canAskAgain, giayDangGhi, dangGhi, batDau, dungLai, xoa } = useGhiAm();
-  const player = useAudioPlayer(uri ? { uri } : null);
 
   const needsSettings = state === 'tu-choi' && !canAskAgain;
 
@@ -32,40 +95,16 @@ export function AudioRecorderRow({ uri, giay, onChange }: Props) {
     await batDau();
   };
 
-  const onXoa = () => {
-    xoa();
-    onChange(undefined);
-  };
-
-  // Đã có bản ghi → hiện thanh nghe lại + xoá
   if (uri) {
     return (
-      <View>
-        <View className="flex-row items-center rounded-input bg-green-100 px-3 py-2">
-          <Pressable
-            onPress={() => (player.playing ? player.pause() : player.play())}
-            accessibilityRole="button"
-            accessibilityLabel={player.playing ? 'Tạm dừng' : 'Nghe lại ghi âm'}
-            hitSlop={8}
-            className="mr-3"
-          >
-            <Ionicons name={player.playing ? 'pause-circle' : 'play-circle'} size={32} color="#166534" />
-          </Pressable>
-          <View className="flex-1">
-            <Text className="text-caption text-green-800 font-semibold">Đã ghi âm</Text>
-            <Text className="text-small text-green-800">{dinhDangGiay(giay ?? 0)}</Text>
-          </View>
-          <Pressable
-            onPress={onXoa}
-            accessibilityRole="button"
-            accessibilityLabel="Xoá ghi âm"
-            hitSlop={8}
-            className="p-2"
-          >
-            <Ionicons name="trash-outline" size={20} color="#b91c1c" />
-          </Pressable>
-        </View>
-      </View>
+      <NgheLaiGhiAm
+        uri={uri}
+        giay={giay ?? 0}
+        onXoa={() => {
+          xoa();
+          onChange(undefined);
+        }}
+      />
     );
   }
 
@@ -90,9 +129,7 @@ export function AudioRecorderRow({ uri, giay, onChange }: Props) {
           color={dangGhi ? '#b91c1c' : '#374151'}
           style={{ marginRight: 8 }}
         />
-        <Text
-          className={`text-body font-semibold ${dangGhi ? 'text-red-700' : 'text-ink'}`}
-        >
+        <Text className={`text-body font-semibold ${dangGhi ? 'text-red-700' : 'text-ink'}`}>
           {dangGhi
             ? `Đang ghi… ${dinhDangGiay(giayDangGhi)} · Bấm để dừng`
             : needsSettings

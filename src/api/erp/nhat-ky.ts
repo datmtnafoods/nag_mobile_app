@@ -1,6 +1,6 @@
 import { client, MOCK_API } from '../client';
-import type { CreateNhatKyBody, NhatKyCanhTac } from '../../features/den-ruong/types';
-import { MOCK_NHAT_KY, nextNhatKyId } from '../../mocks/den-ruong.mock';
+import type { CreateNhatKyBody, NhatKyCanhTac } from '../../features/den-thua/types';
+import { MOCK_NHAT_KY, nextNhatKyId } from '../../mocks/den-thua.mock';
 
 /**
  * Nhật ký canh tác.

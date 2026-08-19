@@ -1,5 +1,5 @@
-import type { NhatKyCanhTac, ThuaDat } from '../features/den-ruong/types';
-import { areaHa, oVuongTuDiem } from '../features/den-ruong/geo';
+import type { NhatKyCanhTac, ThuaDat } from '../features/den-thua/types';
+import { areaHa, oVuongTuDiem } from '../features/den-thua/geo';
 
 /**
  * Toạ độ neo cho demo — vùng Ia Grai, Gia Lai. Trùng dải mà mock geocode

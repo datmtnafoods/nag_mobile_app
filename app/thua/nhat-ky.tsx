@@ -25,12 +25,12 @@ import { MAX_ANH_PHIEU } from '../../src/features/vat-tu/anh';
 import {
   LoaiNhatKyChips,
   LOAI_NHAT_KY_META,
-} from '../../src/features/den-ruong/components/LoaiNhatKyChips';
-import { AudioRecorderRow } from '../../src/features/den-ruong/components/AudioRecorderRow';
+} from '../../src/features/den-thua/components/LoaiNhatKyChips';
+import { AudioRecorderRow } from '../../src/features/den-thua/components/AudioRecorderRow';
 import { useDeviceLocation } from '../../src/hooks/useDeviceLocation';
 import { useNumericInput } from '../../src/hooks/useNumericInput';
 import { formatDateTime } from '../../src/features/vat-tu/format';
-import type { DongVatTuNhatKy, LoaiNhatKy } from '../../src/features/den-ruong/types';
+import type { DongVatTuNhatKy, LoaiNhatKy } from '../../src/features/den-thua/types';
 
 export default function GhiNhatKy() {
   const params = useLocalSearchParams<{ plotId?: string; partyId?: string; tenHo?: string }>();

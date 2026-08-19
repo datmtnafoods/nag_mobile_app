@@ -22,8 +22,8 @@ import { Button } from '../../src/components/Button';
 import { Input } from '../../src/components/Input';
 import { EmptyState } from '../../src/components/EmptyState';
 import { DiaChiField } from '../../src/features/location/components/DiaChiField';
-import { DienTichInput } from '../../src/features/den-ruong/components/DienTichInput';
-import { doiRaM2, oVuongTuDiem, type DonViDienTich } from '../../src/features/den-ruong/geo';
+import { DienTichInput } from '../../src/features/den-thua/components/DienTichInput';
+import { doiRaM2, oVuongTuDiem, type DonViDienTich } from '../../src/features/den-thua/geo';
 import { useDeviceLocation } from '../../src/hooks/useDeviceLocation';
 import type { Party } from '../../src/features/orders/types';
 
@@ -112,7 +112,7 @@ export default function TaoThua() {
             text: 'Ghi nhật ký luôn',
             onPress: () =>
               router.replace(
-                `/ruong/nhat-ky?plotId=${thua.id}&partyId=${thua.partyId}` as never,
+                `/thua/nhat-ky?plotId=${thua.id}&partyId=${thua.partyId}` as never,
               ),
           },
           { text: 'Xong', onPress: () => router.back() },

@@ -11,8 +11,8 @@ import { reverseGeocode, ghepDiaChi } from '../../src/api/erp/geocode';
 import { apiErrorMessage } from '../../src/api/client';
 import { Button } from '../../src/components/Button';
 import { ErrorState } from '../../src/components/ErrorState';
-import { ThuaDatCard } from '../../src/features/den-ruong/components/ThuaDatCard';
-import { permsDenRuong } from '../../src/features/den-ruong/perms';
+import { ThuaDatCard } from '../../src/features/den-thua/components/ThuaDatCard';
+import { permsDenThua } from '../../src/features/den-thua/perms';
 import { useAuthStore } from '../../src/auth/store';
 
 /**
@@ -22,9 +22,9 @@ import { useAuthStore } from '../../src/auth/store';
  */
 const NGUONG_SAI_SO_M = 50;
 
-export default function DenRuong() {
+export default function DenThua() {
   const permissions = useAuthStore((s) => s.permissions);
-  const perms = permsDenRuong(permissions);
+  const perms = permsDenThua(permissions);
 
   const {
     state: gpsState,
@@ -77,7 +77,7 @@ export default function DenRuong() {
         refreshControl={<RefreshControl refreshing={dangLamMoi} onRefresh={doLai} />}
       >
         <View className="mb-4">
-          <Text className="text-h1 text-ink">Đến ruộng</Text>
+          <Text className="text-h1 text-ink">Đến thửa</Text>
           <Text className="text-caption text-ink-muted mt-1">
             Đứng giữa vườn rồi để app dò xem đã có thửa đất chưa.
           </Text>
@@ -177,7 +177,7 @@ export default function DenRuong() {
                   thua={t}
                   onPress={() =>
                     router.push(
-                      `/ruong/nhat-ky?plotId=${t.id}&partyId=${t.partyId}&tenHo=${encodeURIComponent(t.tenHo ?? '')}` as never,
+                      `/thua/nhat-ky?plotId=${t.id}&partyId=${t.partyId}&tenHo=${encodeURIComponent(t.tenHo ?? '')}` as never,
                     )
                   }
                 />
@@ -203,7 +203,7 @@ export default function DenRuong() {
                     disabled={!perms.veThua}
                     onPress={() =>
                       router.push(
-                        `/ruong/tao-thua?lat=${viTri!.lat}&lng=${viTri!.lng}` as never,
+                        `/thua/tao-thua?lat=${viTri!.lat}&lng=${viTri!.lng}` as never,
                       )
                     }
                   />
@@ -227,7 +227,7 @@ export default function DenRuong() {
                       khoangCachM={t.khoangCachM}
                       onPress={() =>
                         router.push(
-                          `/ruong/nhat-ky?plotId=${t.id}&partyId=${t.partyId}&tenHo=${encodeURIComponent(t.tenHo ?? '')}` as never,
+                          `/thua/nhat-ky?plotId=${t.id}&partyId=${t.partyId}&tenHo=${encodeURIComponent(t.tenHo ?? '')}` as never,
                         )
                       }
                     />

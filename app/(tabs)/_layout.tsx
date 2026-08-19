@@ -45,9 +45,9 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="den-ruong"
+        name="den-thua"
         options={{
-          title: 'Đến ruộng',
+          title: 'Đến thửa',
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="leaf-outline" size={size} color={color} />

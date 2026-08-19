@@ -47,7 +47,7 @@ export type Party = {
   province?: Province;
   address?: string;
   // ─ Các field dưới mirror cột đã có ở bảng `party` backend, dùng cho luồng
-  //   nông hộ / đến ruộng. Địa giới từ geocode là chuỗi tự do SAU sáp nhập
+  //   nông hộ / đến thửa. Địa giới từ geocode là chuỗi tự do SAU sáp nhập
   //   1/7/2025 nên gộp vào `address`, không nhét vào enum `province` ở trên.
   kind?: PartyKind;
   commune?: string;

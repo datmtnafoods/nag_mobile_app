@@ -4,15 +4,15 @@ import type {
   KetQuaDoThua,
   ThuaDat,
   ThuaDatKemHo,
-} from '../../features/den-ruong/types';
+} from '../../features/den-thua/types';
 import {
   areaHa,
   centroid,
   khoangCachM,
   pointInRing,
   validateRing,
-} from '../../features/den-ruong/geo';
-import { MOCK_THUA_DAT, nextThuaId } from '../../mocks/den-ruong.mock';
+} from '../../features/den-thua/geo';
+import { MOCK_THUA_DAT, nextThuaId } from '../../mocks/den-thua.mock';
 import { getPartiesByIds } from './parties';
 
 const MOCK_DELAY = 320;
