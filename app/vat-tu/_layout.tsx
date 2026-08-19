@@ -21,22 +21,76 @@ export default function VatTuLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ title: 'Vật tư' }} />
-      <Stack.Screen name="receipts" options={{ title: 'Phiếu vật tư' }} />
-      <Stack.Screen name="[id]" options={{ title: 'Chi tiết phiếu' }} />
-      <Stack.Screen name="catalog" options={{ title: 'Danh mục vật tư' }} />
-      <Stack.Screen name="new-receipt" options={{ title: 'Tạo phiếu' }} />
+
+      {/* Danh mục SKU */}
+      <Stack.Screen name="danh-muc" options={{ title: 'Danh mục vật tư' }} />
+      <Stack.Screen name="sku/[id]" options={{ title: 'Chi tiết SKU' }} />
+      <Stack.Screen name="sku/new" options={{ title: 'Tạo vật tư mới' }} />
+      <Stack.Screen
+        name="sku/pair-code"
+        options={{ headerShown: false, presentation: 'fullScreenModal' }}
+      />
+
+      {/* Nhập kho */}
+      <Stack.Screen name="nhap-kho/index" options={{ title: 'Nhập kho' }} />
+      <Stack.Screen name="nhap-kho/new" options={{ title: 'Tạo phiếu nhập' }} />
+      <Stack.Screen name="nhap-kho/[id]" options={{ title: 'Chi tiết phiếu nhập' }} />
+      <Stack.Screen
+        name="nhap-kho/xac-nhan/[id]"
+        options={{ title: 'Xác nhận nhận hàng' }}
+      />
+
+      {/* Bán hàng */}
+      <Stack.Screen name="ban-hang/index" options={{ title: 'Bán hàng' }} />
+      <Stack.Screen name="ban-hang/new" options={{ title: 'Tạo phiếu bán' }} />
+      <Stack.Screen name="ban-hang/[id]" options={{ title: 'Chi tiết phiếu bán' }} />
+
+      {/* Tồn kho */}
+      <Stack.Screen name="ton-kho/index" options={{ title: 'Tồn kho' }} />
+      <Stack.Screen
+        name="ton-kho/so-chi-tiet"
+        options={{
+          title: 'Sổ chi tiết',
+          presentation: 'modal',
+          headerLeft: () => <HeaderCloseButton variant="close" fallbackHref="/vat-tu/ton-kho" />,
+        }}
+      />
+
+      {/* Kiểm kho */}
+      <Stack.Screen name="kiem-kho/index" options={{ title: 'Kiểm kho' }} />
+      <Stack.Screen name="kiem-kho/new" options={{ title: 'Tạo phiếu kiểm' }} />
+      <Stack.Screen name="kiem-kho/[id]" options={{ title: 'Chi tiết phiếu kiểm' }} />
+
+      {/* Modals + camera */}
       <Stack.Screen
         name="sku-picker"
-        options={{ title: 'Chọn vật tư', presentation: 'modal' }}
+        options={{
+          title: 'Chọn vật tư',
+          presentation: 'modal',
+          headerLeft: () => <HeaderCloseButton variant="close" fallbackHref="/vat-tu" />,
+        }}
+      />
+      <Stack.Screen
+        name="ncc-picker"
+        options={{
+          title: 'Chọn NCC',
+          presentation: 'modal',
+          headerLeft: () => <HeaderCloseButton variant="close" fallbackHref="/vat-tu" />,
+        }}
       />
       <Stack.Screen
         name="partner-picker"
-        options={{ title: 'Chọn đối tác', presentation: 'modal' }}
+        options={{
+          title: 'Chọn khách hàng',
+          presentation: 'modal',
+          headerLeft: () => <HeaderCloseButton variant="close" fallbackHref="/vat-tu" />,
+        }}
       />
       <Stack.Screen
         name="scan-code"
         options={{ headerShown: false, presentation: 'fullScreenModal' }}
       />
+
     </Stack>
   );
 }

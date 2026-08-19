@@ -1,58 +1,59 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { cancelReceipt, getReceipt } from '../../src/api/erp/warehouse';
-import { apiErrorMessage } from '../../src/api/client';
-import { useCurrentUser } from '../../src/auth/store';
-import { canCancelReceipt, permsForVatTu } from '../../src/features/vat-tu/perms';
+import { getMoves, getReceipt, huyPhieu } from '../../../src/api/erp/warehouse';
+import { apiErrorMessage } from '../../../src/api/client';
+import { useCurrentUser } from '../../../src/auth/store';
+import { canCancelReceipt, permsForVatTu } from '../../../src/features/vat-tu/perms';
 import {
   formatDate,
   formatDateTime,
   formatQty,
   formatVND,
-  RECEIPT_KIND_META,
   RECEIPT_STATUS_META,
-} from '../../src/features/vat-tu/format';
-import { KindBadge } from '../../src/features/vat-tu/components/KindBadge';
-import { Button } from '../../src/components/Button';
-import { CancelSheet } from '../../src/components/CancelSheet';
+  statusLabelForKind,
+} from '../../../src/features/vat-tu/format';
+import { KindBadge } from '../../../src/features/vat-tu/components/KindBadge';
+import { TheKhoRow } from '../../../src/features/vat-tu/components/TheKhoRow';
+import { ViTriRow } from '../../../src/features/location/components/ViTriRow';
+import { Button } from '../../../src/components/Button';
+import { CancelSheet } from '../../../src/components/CancelSheet';
+import type { PhieuBan } from '../../../src/features/vat-tu/types';
 
-export default function ReceiptDetail() {
+export default function PhieuBanDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const receiptId = typeof id === 'string' ? id : '';
   const user = useCurrentUser();
   const perms = permsForVatTu(user?.roles);
+  const canCancel = canCancelReceipt(perms);
   const qc = useQueryClient();
+  const [showCancel, setShowCancel] = useState(false);
 
   const q = useQuery({
     queryKey: ['receipt', receiptId],
     queryFn: () => getReceipt(receiptId),
-    enabled: Boolean(receiptId),
+    enabled: !!receiptId,
+  });
+  const movesQuery = useQuery({
+    queryKey: ['moves', { chungTuId: receiptId }],
+    queryFn: () => getMoves({ chungTuId: receiptId }),
+    enabled: !!receiptId && q.data?.phieu.trangThai !== 'ke_hoach',
   });
 
-  const [showCancel, setShowCancel] = useState(false);
-
   const cancelMut = useMutation({
-    mutationFn: (lyDo: string) => cancelReceipt(receiptId, lyDo),
+    mutationFn: (lyDo: string) => huyPhieu(receiptId, lyDo),
     onSuccess: (updated) => {
       qc.setQueryData(['receipt', receiptId], updated);
       qc.invalidateQueries({ queryKey: ['receipts'] });
       qc.invalidateQueries({ queryKey: ['stock'] });
+      qc.invalidateQueries({ queryKey: ['ton-kho'] });
       qc.invalidateQueries({ queryKey: ['moves'] });
       setShowCancel(false);
     },
   });
-
-  if (!receiptId) {
-    return (
-      <SafeAreaView className="flex-1 items-center justify-center px-6">
-        <Text className="text-body text-ink-muted">Thiếu mã phiếu.</Text>
-      </SafeAreaView>
-    );
-  }
 
   if (q.isPending) {
     return (
@@ -61,13 +62,12 @@ export default function ReceiptDetail() {
       </SafeAreaView>
     );
   }
-
-  if (q.isError || !q.data) {
+  if (q.isError || !q.data || q.data.phieu.kind !== 'ban') {
     return (
       <SafeAreaView className="flex-1 items-center justify-center px-6">
         <Ionicons name="alert-circle-outline" size={48} color="#dd1c2e" />
         <Text className="text-body text-ink mt-3 text-center">
-          {q.error ? apiErrorMessage(q.error) : 'Không tìm thấy phiếu'}
+          {q.error ? apiErrorMessage(q.error) : 'Không tìm thấy phiếu bán'}
         </Text>
         <View className="mt-4 w-full">
           <Button label="Quay lại" onPress={() => router.back()} variant="secondary" />
@@ -76,10 +76,10 @@ export default function ReceiptDetail() {
     );
   }
 
-  const { phieu, dongHang } = q.data;
-  const kindMeta = RECEIPT_KIND_META[phieu.kind];
+  const phieu = q.data.phieu as PhieuBan;
+  const dongHang = q.data.dongHang;
   const statusMeta = RECEIPT_STATUS_META[phieu.trangThai];
-  const canCancel = canCancelReceipt(perms) && phieu.trangThai === 'ghi';
+  const statusLabel = statusLabelForKind(phieu.trangThai, 'ban');
   const isHuy = phieu.trangThai === 'huy';
 
   return (
@@ -90,15 +90,14 @@ export default function ReceiptDetail() {
           <View className="flex-1 pr-2">
             <Text className="text-h2 text-ink">{phieu.id}</Text>
             <Text className="text-caption text-ink-muted mt-1">
-              Ngày lập: {formatDateTime(phieu.taoLuc)}
+              Ngày: {formatDateTime(phieu.taoLuc)}
             </Text>
+            <Text className="text-caption text-ink-muted">Người tạo: {phieu.nguoiTao}</Text>
           </View>
           <View className="items-end gap-y-1">
-            <KindBadge kind={phieu.kind} />
+            <KindBadge kind="ban" />
             <View className={`rounded-input px-2 py-1 ${statusMeta.bg}`}>
-              <Text className={`text-caption font-semibold ${statusMeta.text}`}>
-                {statusMeta.label}
-              </Text>
+              <Text className={`text-caption font-semibold ${statusMeta.text}`}>{statusLabel}</Text>
             </View>
           </View>
         </View>
@@ -117,26 +116,28 @@ export default function ReceiptDetail() {
 
         <View className="rounded-card bg-white border border-border p-4 mb-4">
           <View className="flex-row items-center mb-2">
-            <Ionicons name="business-outline" size={18} color="#6b7280" />
+            <Ionicons name="storefront-outline" size={18} color="#6b7280" />
             <Text className="text-caption text-ink-muted ml-2">Kho</Text>
           </View>
-          <Text className="text-body text-ink font-semibold">
-            {phieu.khoTen ?? phieu.khoId}
-          </Text>
+          <Text className="text-body text-ink font-semibold">{phieu.khoTen ?? phieu.khoId}</Text>
         </View>
 
         <View className="rounded-card bg-white border border-border p-4 mb-4">
           <View className="flex-row items-center mb-2">
-            <Ionicons
-              name={phieu.kind === 'nhap' ? 'business' : 'person-outline'}
-              size={18}
-              color="#6b7280"
-            />
-            <Text className="text-caption text-ink-muted ml-2">
-              {phieu.kind === 'nhap' ? 'Nhà cung cấp' : 'Khách hàng'}
-            </Text>
+            <Ionicons name="person-outline" size={18} color="#6b7280" />
+            <Text className="text-caption text-ink-muted ml-2">Khách hàng</Text>
           </View>
-          <Text className="text-body text-ink font-semibold">{phieu.partnerTen ?? '—'}</Text>
+          <Text className="text-body text-ink font-semibold">
+            {phieu.nongHoTen ?? 'Khách lẻ'}
+          </Text>
+          {phieu.nongHoId ? (
+            <Text className="text-caption text-ink-muted">{phieu.nongHoId}</Text>
+          ) : null}
+          {phieu.viTri ? (
+            <View className="mt-2 pt-2 border-t border-border">
+              <ViTriRow viTri={phieu.viTri} nhan={`Phiếu bán ${phieu.id}`} />
+            </View>
+          ) : null}
         </View>
 
         <View className="rounded-card bg-white border border-border p-4 mb-4">
@@ -148,8 +149,8 @@ export default function ReceiptDetail() {
                 i < dongHang.length - 1 ? 'border-b border-border' : ''
               }`}
             >
-              <View className="h-10 w-10 rounded-input bg-primary-50 items-center justify-center mr-3">
-                <Ionicons name="cube" size={20} color="#dd1c2e" />
+              <View className="h-10 w-10 rounded-input bg-amber-100 items-center justify-center mr-3">
+                <Ionicons name="cube" size={20} color="#92400e" />
               </View>
               <View className="flex-1">
                 <Text
@@ -160,14 +161,13 @@ export default function ReceiptDetail() {
                   {d.tenSku ?? d.vatTuId}
                 </Text>
                 <Text className="text-caption text-ink-muted">
-                  {formatQty(d.soLuongCoBan, d.donViCoBan)}
+                  {formatQty(d.soLuong, d.donVi === 'lon' ? d.donViLon : d.donViCoBan)}
                   {d.donGia ? ` · ${formatVND(d.donGia)}/${d.donViCoBan}` : ''}
                 </Text>
-                {d.lo || d.hanDung ? (
+                {d.lo ? (
                   <Text className="text-small text-ink-muted mt-0.5">
-                    {d.lo ? `Lô: ${d.lo}` : ''}
-                    {d.lo && d.hanDung ? ' · ' : ''}
-                    {d.hanDung ? `HSD: ${formatDate(d.hanDung)}` : ''}
+                    Lô: {d.lo}
+                    {d.hanDung ? ` · HSD: ${formatDate(d.hanDung)}` : ''}
                   </Text>
                 ) : null}
               </View>
@@ -182,17 +182,28 @@ export default function ReceiptDetail() {
           ))}
         </View>
 
-        <View className="rounded-card bg-white border border-border p-4">
-          <View className="flex-row items-center justify-between">
-            <Text className="text-caption text-ink-muted">Tổng số lượng</Text>
-            <Text className="text-body text-ink font-semibold">
-              {formatQty(phieu.tongSoLuong)}
-            </Text>
+        {phieu.anh && phieu.anh.length > 0 ? (
+          <View className="rounded-card bg-white border border-border p-4 mb-4">
+            <Text className="text-caption text-ink-muted mb-2">Ảnh bằng chứng</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              {phieu.anh.map((uri, i) => (
+                <Image
+                  key={i}
+                  source={{ uri }}
+                  style={{ width: 100, height: 100, borderRadius: 10, backgroundColor: '#f3f4f6' }}
+                />
+              ))}
+            </ScrollView>
           </View>
+        ) : null}
+
+        <View className="rounded-card bg-white border border-border p-4">
           <View className="flex-row items-center justify-between mt-2 pt-2 border-t border-border">
             <Text className="text-caption text-ink-muted">Tổng tiền</Text>
             <Text
-              className={`text-h2 font-bold ${isHuy ? 'line-through opacity-60 text-ink' : 'text-primary'}`}
+              className={`text-h2 font-bold ${
+                isHuy ? 'line-through opacity-60 text-ink' : 'text-primary'
+              }`}
             >
               {formatVND(phieu.tongTien)}
             </Text>
@@ -205,14 +216,27 @@ export default function ReceiptDetail() {
             <Text className="text-body text-ink mt-1">{phieu.ghiChu}</Text>
           </View>
         ) : null}
+
+        {phieu.trangThai === 'ghi' && movesQuery.data && movesQuery.data.length > 0 ? (
+          <View className="rounded-card bg-white border border-border p-4 mt-4">
+            <Text className="text-caption text-ink-muted mb-2">
+              Sổ kho đã ghi ({movesQuery.data.length} dòng)
+            </Text>
+            {movesQuery.data.map((m) => {
+              const line = dongHang.find((d) => d.vatTuId === m.vatTuId);
+              return (
+                <TheKhoRow key={m.id} move={m} donViCoBan={line?.donViCoBan ?? ''} />
+              );
+            })}
+          </View>
+        ) : null}
       </ScrollView>
 
-      {canCancel ? (
+      {canCancel && phieu.trangThai === 'ghi' ? (
         <View className="px-4 pb-4 pt-2 border-t border-border bg-bg">
           <Button
-            label={`Huỷ ${kindMeta.label.toLowerCase()}`}
+            label="Huỷ phiếu bán"
             variant="secondary"
-            disabled={cancelMut.isPending}
             onPress={() => {
               cancelMut.reset();
               setShowCancel(true);
@@ -224,7 +248,7 @@ export default function ReceiptDetail() {
       <CancelSheet
         visible={showCancel}
         title={`Huỷ phiếu ${phieu.id}`}
-        helperText="Nhập lý do huỷ để lưu vào lịch sử."
+        helperText="Huỷ phiếu bán đã ghi sẽ sinh dòng sổ ĐẢO DẤU (trả hàng về tồn), dòng cũ giữ nguyên để truy vết."
         placeholder="Ví dụ: Khách đổi ý"
         submitting={cancelMut.isPending}
         errorMessage={cancelMut.isError ? apiErrorMessage(cancelMut.error) : null}

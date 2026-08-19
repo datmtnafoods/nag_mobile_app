@@ -14,7 +14,7 @@ export function KindBadge({ kind, small }: { kind: ReceiptKind; small?: boolean 
       <Ionicons
         name={meta.icon as keyof typeof Ionicons.glyphMap}
         size={small ? 12 : 14}
-        color={kind === 'nhap' ? '#166534' : '#92400e'}
+        color={kind === 'nhap' ? '#166534' : kind === 'ban' ? '#92400e' : '#1e40af'}
         style={{ marginRight: 4 }}
       />
       <Text className={`${meta.text} ${small ? 'text-small' : 'text-caption'} font-semibold`}>

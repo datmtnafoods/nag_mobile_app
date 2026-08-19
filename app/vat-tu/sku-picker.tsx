@@ -9,21 +9,29 @@ import {
   Platform,
   ScrollView,
   BackHandler,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, Stack } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { listLoai, listVatTu } from '../../src/api/erp/catalog-supplies';
+import { addMa, listLoai, listVatTu } from '../../src/api/erp/catalog-supplies';
 import { apiErrorMessage } from '../../src/api/client';
 import { useReceiptDraftStore } from '../../src/stores/receipt-draft';
 import { Input } from '../../src/components/Input';
 import { Button } from '../../src/components/Button';
+import { EmptyState } from '../../src/components/EmptyState';
+import { ErrorState } from '../../src/components/ErrorState';
+import { FilterChip } from '../../src/components/FilterChip';
 import { SkuRow } from '../../src/features/vat-tu/components/SkuRow';
 import { QuantityStepper } from '../../src/features/vat-tu/components/QuantityStepper';
 import type { VatTu } from '../../src/features/vat-tu/types';
 
 export default function SkuPicker() {
+  const params = useLocalSearchParams<{ pairMa?: string; addToKiem?: string }>();
+  const pairMa = typeof params.pairMa === 'string' ? params.pairMa : undefined;
+  const addToKiem = params.addToKiem === '1';
+
   const [q, setQ] = useState('');
   const [loaiId, setLoaiId] = useState<string | undefined>(undefined);
   const [picked, setPicked] = useState<VatTu | null>(null);
@@ -32,6 +40,26 @@ export default function SkuPicker() {
   const [lo, setLo] = useState('');
 
   const addLine = useReceiptDraftStore((s) => s.addLine);
+  const qc = useQueryClient();
+
+  const pairMutation = useMutation({
+    mutationFn: ({ skuId, ma }: { skuId: string; ma: string }) =>
+      addMa(skuId, { ma, kieu: 'qr', nguon: 'tu_gan' }),
+    onSuccess: (sku) => {
+      qc.invalidateQueries({ queryKey: ['vat-tu', 'list'] });
+      qc.setQueryData(['vat-tu', 'one', sku.id], sku);
+      Alert.alert('Đã gắn mã', `Mã "${pairMa}" đã gắn vào ${sku.ten}.`, [
+        {
+          text: 'Xong',
+          onPress: () => {
+            if (router.canGoBack()) router.back();
+            else router.replace(`/vat-tu/sku/${sku.id}` as never);
+          },
+        },
+      ]);
+    },
+    onError: (err) => Alert.alert('Lỗi', apiErrorMessage(err)),
+  });
 
   const loaiQuery = useQuery({
     queryKey: ['vat-tu', 'loai'],
@@ -116,11 +144,10 @@ export default function SkuPicker() {
             <ActivityIndicator color="#dd1c2e" />
           </View>
         ) : skuQuery.isError ? (
-          <View className="flex-1 items-center justify-center px-6">
-            <Text className="text-caption text-red-700 text-center">
-              {apiErrorMessage(skuQuery.error)}
-            </Text>
-          </View>
+          <ErrorState
+            message={apiErrorMessage(skuQuery.error)}
+            onRetry={() => void skuQuery.refetch()}
+          />
         ) : (
           <FlatList
             data={skuQuery.data ?? []}
@@ -130,6 +157,33 @@ export default function SkuPicker() {
               <SkuRow
                 sku={item}
                 onPress={() => {
+                  if (pairMa) {
+                    Alert.alert(
+                      'Gắn mã',
+                      `Gắn mã "${pairMa}" vào SKU "${item.ten}"?`,
+                      [
+                        { text: 'Huỷ', style: 'cancel' },
+                        {
+                          text: 'Gắn mã',
+                          onPress: () =>
+                            pairMutation.mutate({ skuId: item.id, ma: pairMa }),
+                        },
+                      ],
+                    );
+                    return;
+                  }
+                  if (addToKiem) {
+                    // expo-router tự encode params — không encodeURIComponent tay để tránh double-decode.
+                    router.replace({
+                      pathname: '/vat-tu/kiem-kho/new',
+                      params: {
+                        pickedId: item.id,
+                        pickedTen: item.ten,
+                        donViCoBan: item.donViCoBan,
+                      },
+                    } as never);
+                    return;
+                  }
                   setPicked(item);
                   setUnit('co_ban');
                   setQty(1);
@@ -138,9 +192,23 @@ export default function SkuPicker() {
               />
             )}
             ListEmptyComponent={
-              <Text className="text-caption text-ink-muted text-center py-8">
-                Không có vật tư phù hợp
-              </Text>
+              <EmptyState
+                icon="cube-outline"
+                title="Không có vật tư phù hợp"
+                message="Thử đổi từ khoá tìm kiếm hoặc bỏ bộ lọc loại."
+                cta={
+                  q || loaiId
+                    ? {
+                        label: 'Xem tất cả',
+                        onPress: () => {
+                          setQ('');
+                          setLoaiId(undefined);
+                        },
+                        variant: 'outline',
+                      }
+                    : undefined
+                }
+              />
             }
           />
         )}
@@ -202,19 +270,3 @@ export default function SkuPicker() {
   );
 }
 
-function FilterChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      className={`h-9 px-3 rounded-input flex-row items-center border ${
-        active ? 'bg-primary border-primary' : 'bg-white border-border'
-      }`}
-    >
-      <Text className={`text-caption font-semibold ${active ? 'text-white' : 'text-ink'}`}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}

@@ -42,7 +42,23 @@
         {
           "cameraPermission": "NaGreen cần dùng camera để quét tem QR kích hoạt giống."
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "NaGreen cần truy cập ảnh để đính kèm ảnh phiếu và ảnh vật tư.",
+          "cameraPermission": "NaGreen cần dùng camera để chụp ảnh phiếu và vật tư."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "NaGreen cần vị trí để ghi nơi lập phiếu và tự điền địa chỉ.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      "@react-native-community/datetimepicker"
     ]
   }
 }

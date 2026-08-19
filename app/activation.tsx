@@ -99,7 +99,7 @@ export default function Activation() {
         <Stack.Screen
           options={{
             title: 'Kích hoạt tem',
-            headerLeft: () => <HeaderCloseButton onPress={close} />,
+            headerLeft: () => <HeaderCloseButton variant="close" onPress={close} />,
           }}
         />
         <View className="flex-1 items-center justify-center px-6">

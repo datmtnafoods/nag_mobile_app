@@ -1,4 +1,4 @@
-import type { ReceiptKind, ReceiptStatus } from './types';
+import type { ChungTuLoai, MaKieu, MaNguon, PhieuTrangThai, ReceiptKind } from './types';
 
 const NF = new Intl.NumberFormat('vi-VN');
 
@@ -39,10 +39,36 @@ type KindMeta = {
   icon: string;
 };
 
-export const RECEIPT_STATUS_META: Record<ReceiptStatus, StatusMeta> = {
-  ghi: { label: 'Đã ghi', bg: 'bg-green-100', text: 'text-green-800', icon: 'checkmark-outline' },
-  huy: { label: 'Đã huỷ', bg: 'bg-red-50', text: 'text-red-700', icon: 'close-circle-outline' },
+export const RECEIPT_STATUS_META: Record<PhieuTrangThai, StatusMeta> = {
+  ke_hoach: {
+    label: 'Phiếu tạm',
+    bg: 'bg-amber-100',
+    text: 'text-amber-800',
+    icon: 'time-outline',
+  },
+  ghi: {
+    label: 'Đã ghi',
+    bg: 'bg-green-100',
+    text: 'text-green-800',
+    icon: 'checkmark-outline',
+  },
+  huy: {
+    label: 'Đã huỷ',
+    bg: 'bg-red-50',
+    text: 'text-red-700',
+    icon: 'close-circle-outline',
+  },
 };
+
+/** Label riêng cho nhập kho (Đã ghi → "Đã nhập hàng"). */
+export function statusLabelForKind(status: PhieuTrangThai, kind: ReceiptKind): string {
+  if (status === 'ghi') {
+    if (kind === 'nhap') return 'Đã nhập hàng';
+    if (kind === 'kiem_ke') return 'Đã cân bằng';
+    return 'Đã ghi';
+  }
+  return RECEIPT_STATUS_META[status].label;
+}
 
 export const RECEIPT_KIND_META: Record<ReceiptKind, KindMeta> = {
   nhap: {
@@ -61,4 +87,46 @@ export const RECEIPT_KIND_META: Record<ReceiptKind, KindMeta> = {
     border: 'border-amber-500',
     icon: 'arrow-up-circle-outline',
   },
+  kiem_ke: {
+    label: 'Kiểm kho',
+    cta: 'Tạo phiếu kiểm',
+    bg: 'bg-blue-100',
+    text: 'text-blue-800',
+    border: 'border-blue-500',
+    icon: 'clipboard-outline',
+  },
 };
+
+export const MA_KIEU_LABELS: Record<MaKieu, string> = {
+  qr: 'QR',
+  barcode: 'Barcode',
+  datamatrix: 'Datamatrix',
+  khac: 'Khác',
+};
+
+export const MA_NGUON_LABELS: Record<MaNguon, string> = {
+  nha_sx: 'Nhà SX',
+  tu_gan: 'Tự gán',
+  he_thong: 'Hệ thống',
+};
+
+export const CHUNG_TU_LOAI_LABELS: Record<ChungTuLoai, string> = {
+  nhap: 'Nhập kho',
+  ban: 'Bán',
+  kiem_ke: 'Kiểm kê',
+  dieu_chuyen: 'Điều chuyển',
+  nhap_tram: 'Nhập trạm',
+  thu_mua: 'Thu mua',
+  xuat_huy: 'Xuất huỷ',
+  xuat_noi_bo: 'Xuất nội bộ',
+  tra_ncc: 'Trả NCC',
+  khach_tra: 'Khách trả',
+};
+
+export function formatMaKieuLabel(kieu: MaKieu): string {
+  return MA_KIEU_LABELS[kieu] ?? kieu;
+}
+
+export function formatMaNguonLabel(nguon: MaNguon): string {
+  return MA_NGUON_LABELS[nguon] ?? nguon;
+}

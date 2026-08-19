@@ -33,7 +33,7 @@ if (!__DEV__ && !MOCK_API && !API_BASE_URL.startsWith('https://')) {
 }
 
 type TokenGetter = () => string | null;
-type UnauthorizedHandler = () => void;
+type UnauthorizedHandler = (err: AxiosError) => void;
 
 let getToken: TokenGetter = () => null;
 let onUnauthorized: UnauthorizedHandler = () => {};
@@ -61,7 +61,7 @@ client.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      onUnauthorized();
+      onUnauthorized(error);
     }
     return Promise.reject(error);
   },
@@ -70,7 +70,23 @@ client.interceptors.response.use(
 export function apiErrorMessage(err: unknown): string {
   if (axios.isAxiosError(err)) {
     const data = err.response?.data as { message?: string; error?: string } | undefined;
+    if (err.response?.status === 429) {
+      return data?.message ?? 'Đăng nhập sai quá nhiều lần — thử lại sau 15 phút';
+    }
     return data?.message ?? data?.error ?? err.message;
   }
+  if (err && typeof err === 'object' && 'message' in err) {
+    return String((err as { message: string }).message);
+  }
   return err instanceof Error ? err.message : 'Đã xảy ra lỗi';
+}
+
+/** Trả về HTTP status kèm mock status (mock lỗi có gắn .status trong throw). */
+export function apiErrorStatus(err: unknown): number | undefined {
+  if (axios.isAxiosError(err)) return err.response?.status;
+  if (err && typeof err === 'object' && 'status' in err) {
+    const s = (err as { status?: unknown }).status;
+    return typeof s === 'number' ? s : undefined;
+  }
+  return undefined;
 }

@@ -56,7 +56,7 @@ export default function Home() {
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
         <View className="mb-4">
           <Text className="text-caption text-ink-muted">Xin chào,</Text>
-          <Text className="text-h2 text-ink">{user?.fullName ?? user?.username ?? 'NaGreen'}</Text>
+          <Text className="text-h2 text-ink">{user?.name ?? user?.email ?? 'NaGreen'}</Text>
           {user?.roles?.length ? (
             <Text className="text-caption text-ink-muted mt-1">
               Vai trò: {user.roles.join(', ')}

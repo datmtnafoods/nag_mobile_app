@@ -1,7 +1,7 @@
 import { View, Text, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import type { VatTu } from '../types';
 import { formatVND } from '../format';
+import { SkuThumbnail } from './SkuThumbnail';
 
 type Props = {
   sku: VatTu;
@@ -12,22 +12,34 @@ type Props = {
 
 export function SkuRow({ sku, loaiTen, onPress, right }: Props) {
   const Container: React.ElementType = onPress ? Pressable : View;
+  const isNgung = sku.trangThai === 'ngung';
   return (
     <Container
       onPress={onPress}
-      className="rounded-card bg-white border border-border p-3 mb-2 flex-row items-center active:bg-bg-soft"
+      className={`rounded-card bg-white border border-border p-3 mb-2 flex-row items-center active:bg-bg-soft ${
+        isNgung ? 'opacity-70' : ''
+      }`}
     >
-      <View className="h-10 w-10 rounded-input bg-primary-50 items-center justify-center mr-3">
-        <Ionicons name="cube-outline" size={20} color="#dd1c2e" />
+      <View className="mr-3">
+        <SkuThumbnail uri={sku.anh?.[0]} size={44} />
       </View>
       <View className="flex-1">
-        <Text className="text-body text-ink font-semibold" numberOfLines={1}>
-          {sku.ten}
-        </Text>
+        <View className="flex-row items-center">
+          <Text className="text-body text-ink font-semibold flex-1" numberOfLines={1}>
+            {sku.ten}
+          </Text>
+          {isNgung ? (
+            <View className="rounded-input bg-neutral-200 px-2 py-0.5 ml-2">
+              <Text className="text-small text-neutral-700">Ngừng KD</Text>
+            </View>
+          ) : null}
+        </View>
         <Text className="text-caption text-ink-muted" numberOfLines={1}>
-          {loaiTen ? `${loaiTen} · ` : ''}
+          <Text className="font-mono">{sku.id}</Text>
+          {loaiTen ? ` · ${loaiTen}` : ''}
+          {' · '}
           {sku.donViCoBan}
-          {sku.donViLon && sku.heSoQuyDoi ? ` (${sku.heSoQuyDoi} ${sku.donViCoBan}/${sku.donViLon})` : ''}
+          {sku.donViLon && sku.heSoQuyDoi ? ` (1 ${sku.donViLon} = ${sku.heSoQuyDoi} ${sku.donViCoBan})` : ''}
         </Text>
         {sku.giaBan ? (
           <Text className="text-caption text-primary font-semibold mt-0.5">

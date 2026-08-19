@@ -18,20 +18,30 @@ type Props = {
   fallbackHref?: string;
   /** Ghi đè handler mặc định (VD force replace về home ngay cả khi có history). */
   onPress?: () => void;
+  /**
+   * 'back' (mặc định) = chevron cho push screen.
+   * 'close' = X cho modal / fullScreenModal.
+   */
+  variant?: 'back' | 'close';
 };
 
-export function HeaderCloseButton({ fallbackHref, onPress }: Props) {
+export function HeaderCloseButton({ fallbackHref, onPress, variant = 'back' }: Props) {
   const defaultClose = useCloseHandler(fallbackHref);
   const handler = onPress ?? defaultClose;
+  const isClose = variant === 'close';
   return (
     <Pressable
       onPress={handler}
       hitSlop={12}
       accessibilityRole="button"
-      accessibilityLabel="Đóng"
+      accessibilityLabel={isClose ? 'Đóng' : 'Quay lại'}
       style={{ paddingHorizontal: 4 }}
     >
-      <Ionicons name="close" size={26} color="#111827" />
+      <Ionicons
+        name={isClose ? 'close-outline' : 'chevron-back'}
+        size={26}
+        color="#111827"
+      />
     </Pressable>
   );
 }

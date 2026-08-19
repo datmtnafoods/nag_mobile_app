@@ -4,13 +4,25 @@ import type { DraftLine } from '../types';
 import { formatQtyWithUnit } from '../unit-convert';
 import { formatVND } from '../format';
 
+type Tone = 'nhap' | 'ban' | 'kiem_ke' | 'neutral';
+
 type Props = {
   line: DraftLine;
   onRemove: () => void;
   warning?: string | null;
+  /** Tone icon theo loại chứng từ — nhập green, bán amber, kiểm blue. */
+  tone?: Tone;
 };
 
-export function LineEditor({ line, onRemove, warning }: Props) {
+const TONE_STYLES: Record<Tone, { bg: string; color: string }> = {
+  nhap: { bg: 'bg-green-100', color: '#166534' },
+  ban: { bg: 'bg-amber-100', color: '#92400e' },
+  kiem_ke: { bg: 'bg-blue-50', color: '#1e40af' },
+  neutral: { bg: 'bg-neutral-100', color: '#6b7280' },
+};
+
+export function LineEditor({ line, onRemove, warning, tone = 'neutral' }: Props) {
+  const toneStyle = TONE_STYLES[tone];
   const { primary, caption } = formatQtyWithUnit(line.soLuong, line.donVi, {
     donViCoBan: line.donViCoBan,
     donViLon: line.donViLon,
@@ -21,8 +33,10 @@ export function LineEditor({ line, onRemove, warning }: Props) {
   return (
     <View className="py-3 border-b border-border">
       <View className="flex-row items-start">
-        <View className="h-10 w-10 rounded-input bg-primary-50 items-center justify-center mr-3">
-          <Ionicons name="cube" size={20} color="#dd1c2e" />
+        <View
+          className={`h-10 w-10 rounded-input ${toneStyle.bg} items-center justify-center mr-3`}
+        >
+          <Ionicons name="cube" size={20} color={toneStyle.color} />
         </View>
         <View className="flex-1">
           <Text className="text-body text-ink font-semibold" numberOfLines={1}>

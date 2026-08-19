@@ -11,7 +11,7 @@ import { Button } from '../../src/components/Button';
 
 export default function ScanCode() {
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
-  const target = typeof returnTo === 'string' ? returnTo : '/vat-tu/new-receipt';
+  const target = typeof returnTo === 'string' ? returnTo : '/vat-tu';
 
   const [permission, requestPermission] = useCameraPermissions();
   const [torch, setTorch] = useState(false);

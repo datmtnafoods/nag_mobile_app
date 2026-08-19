@@ -14,6 +14,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { Input } from '../../src/components/Input';
 import { Button } from '../../src/components/Button';
+import { EmptyState } from '../../src/components/EmptyState';
 import { useReceiptDraftStore } from '../../src/stores/receipt-draft';
 import { searchParties } from '../../src/api/erp/parties';
 
@@ -145,9 +146,11 @@ export default function PartnerPicker() {
                 </Pressable>
               )}
               ListEmptyComponent={
-                <Text className="text-caption text-ink-muted text-center py-8">
-                  Không tìm thấy khách phù hợp
-                </Text>
+                <EmptyState
+                  icon="person-outline"
+                  title="Không tìm thấy khách phù hợp"
+                  message="Thử đổi từ khoá, hoặc nhập tay tên khách."
+                />
               }
             />
           )}

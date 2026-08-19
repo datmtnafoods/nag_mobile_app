@@ -7,6 +7,7 @@ import type {
   PartnerDraft,
   ReceiptKind,
 } from '../features/vat-tu/types';
+import type { ViTri } from '../features/location/types';
 import { convertToBase } from '../features/vat-tu/unit-convert';
 
 export const RECEIPT_DRAFT_KEY = 'nag.receipt-draft';
@@ -18,6 +19,14 @@ type ReceiptDraftState = {
   partner?: PartnerDraft;
   lines: DraftLine[];
   ghiChu?: string;
+  // Nhập kho: metadata bổ sung
+  expectedOn?: string;
+  soHoaDon?: string;
+  giamGia?: number;
+  /** Ảnh bằng chứng (data URL, không persist). */
+  anh: string[];
+  /** Toạ độ nơi lập phiếu (không persist — đo lại mỗi lần mở wizard). */
+  viTri?: ViTri;
 
   setOwner: (userId: string | undefined) => void;
   startDraft: (kind: ReceiptKind) => void;
@@ -27,6 +36,11 @@ type ReceiptDraftState = {
   updateLine: (index: number, patch: Partial<DraftLine>) => void;
   removeLine: (index: number) => void;
   setGhiChu: (v: string | undefined) => void;
+  setExpectedOn: (v: string | undefined) => void;
+  setSoHoaDon: (v: string | undefined) => void;
+  setGiamGia: (v: number | undefined) => void;
+  setAnh: (anh: string[]) => void;
+  setViTri: (v: ViTri | undefined) => void;
   reset: () => void;
 
   totalBaseQuantity: () => number;
@@ -43,23 +57,41 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
     (set, get) => ({
       kind: null,
       lines: [],
+      anh: [],
 
       setOwner: (userId) => set({ ownerUserId: userId }),
 
       startDraft: (kind) =>
-        set({ kind, khoId: undefined, partner: undefined, lines: [], ghiChu: undefined }),
+        set({
+          kind,
+          khoId: undefined,
+          partner: undefined,
+          lines: [],
+          ghiChu: undefined,
+          expectedOn: undefined,
+          soHoaDon: undefined,
+          giamGia: undefined,
+          anh: [],
+          viTri: undefined,
+        }),
 
       setKho: (khoId) => set({ khoId }),
       setPartner: (partner) => set({ partner }),
       setGhiChu: (ghiChu) => set({ ghiChu }),
+      setExpectedOn: (v) => set({ expectedOn: v }),
+      setSoHoaDon: (v) => set({ soHoaDon: v }),
+      setGiamGia: (v) => set({ giamGia: v }),
+      setAnh: (anh) => set({ anh }),
+      setViTri: (viTri) => set({ viTri }),
 
       addLine: (line) =>
         set((s) => {
           const idx = s.lines.findIndex((l) => isSameLineKey(l, line));
           if (idx >= 0) {
             const existing = s.lines[idx]!;
-            // Cộng dồn: quy về đơn vị hiện có trong cart (giữ nguyên donVi cũ)
-            const addedBase = convertToBase(line.soLuong, line.donVi, { heSoQuyDoi: line.heSoQuyDoi });
+            const addedBase = convertToBase(line.soLuong, line.donVi, {
+              heSoQuyDoi: line.heSoQuyDoi,
+            });
             const existingBase = convertToBase(existing.soLuong, existing.donVi, {
               heSoQuyDoi: existing.heSoQuyDoi,
             });
@@ -72,7 +104,6 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
             next[idx] = {
               ...existing,
               soLuong: Math.round(newQty * 1000) / 1000,
-              // Ưu tiên giá/lô/hạn mới nhất user vừa nhập (last-write-wins)
               donGia: line.donGia ?? existing.donGia,
               hanDung: line.hanDung ?? existing.hanDung,
               serial: line.serial ?? existing.serial,
@@ -110,6 +141,11 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
           partner: undefined,
           lines: [],
           ghiChu: undefined,
+          expectedOn: undefined,
+          soHoaDon: undefined,
+          giamGia: undefined,
+          anh: [],
+          viTri: undefined,
         }),
 
       totalBaseQuantity: () =>
@@ -126,12 +162,14 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
         }, 0),
 
       toCreateBody: () => {
-        const { kind, khoId, partner, lines, ghiChu } = get();
+        const { kind, khoId, partner, lines, ghiChu, expectedOn, soHoaDon, giamGia, anh, viTri } =
+          get();
         if (!kind || !khoId || !lines.length) return null;
         const body: CreateReceiptBody = {
           khoId,
           ghiChu,
-          anh: [],
+          anh: anh ?? [],
+          viTri,
           dongHang: lines.map((l) => ({
             vatTuId: l.vatTuId,
             soLuong: l.soLuong,
@@ -144,7 +182,11 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
         };
         if (kind === 'nhap') {
           body.ncc = partner?.ten;
-        } else {
+          body.nccId = partner?.id;
+          if (expectedOn) body.expectedOn = expectedOn;
+          if (soHoaDon) body.soHoaDon = soHoaDon;
+          if (giamGia != null) body.giamGia = giamGia;
+        } else if (kind === 'ban') {
           if (partner?.kind === 'nongHo') {
             body.nongHoId = partner.id;
             body.nongHoTen = partner.ten;
@@ -157,15 +199,22 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
     }),
     {
       name: RECEIPT_DRAFT_KEY,
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => AsyncStorage),
-      // Persist chỉ meta + lines + ghiChu + ownerUserId. KHÔNG persist partner (PII).
+      // v1 → v2 chỉ thêm optional field (expectedOn/soHoaDon/giamGia/nccId) — shape v1
+      // backward-compat, migrate no-op để tránh warning "no migrate function".
+      migrate: (persisted) => persisted as Partial<ReceiptDraftState>,
+      // Persist chỉ meta + lines + ghiChu + expectedOn + soHoaDon + giamGia + ownerUserId.
+      // KHÔNG persist partner (PII) hay anh (data URI to, base64 slow re-encode).
       partialize: (state) => ({
         ownerUserId: state.ownerUserId,
         kind: state.kind,
         khoId: state.khoId,
         lines: state.lines,
         ghiChu: state.ghiChu,
+        expectedOn: state.expectedOn,
+        soHoaDon: state.soHoaDon,
+        giamGia: state.giamGia,
       }),
     },
   ),
