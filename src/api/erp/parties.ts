@@ -35,9 +35,9 @@ export async function searchParties(q: string): Promise<Party[]> {
  * để không nạp cả bảng lúc gõ tìm), hàm này trả danh sách đầy đủ để duyệt.
  */
 export async function listParties(
-  params: { q?: string; kind?: PartyKind } = {},
+  params: { q?: string; kind?: PartyKind; mine?: boolean } = {},
 ): Promise<Party[]> {
-  const { q, kind } = params;
+  const { q, kind, mine } = params;
   if (MOCK_API) {
     await new Promise((r) => setTimeout(r, MOCK_DELAY));
     const needle = q?.trim().toLowerCase();
@@ -54,7 +54,8 @@ export async function listParties(
     });
   }
   const { data } = await client.get<{ rows: Party[] }>('/parties', {
-    params: { q, kind, pageSize: 200 },
+    // `mine=1` truyền chuỗi vì backend đọc `req.query.mine === '1' | 'true'`.
+    params: { q, kind, mine: mine ? '1' : undefined, pageSize: 200 },
   });
   return data.rows;
 }

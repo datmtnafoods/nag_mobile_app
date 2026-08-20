@@ -9,6 +9,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Button } from '../../src/components/Button';
 import { Input } from '../../src/components/Input';
 import { login, MOCK_LOGIN_HINTS } from '../../src/api/erp/auth';
+import { getMyScope } from '../../src/api/erp/users';
 import { apiErrorMessage, apiErrorStatus, MOCK_API, API_BASE_URL } from '../../src/api/client';
 import { useAuthStore } from '../../src/auth/store';
 import { safeResolveNext } from '../../src/auth/next';
@@ -31,6 +32,7 @@ const COOLDOWN_SECONDS = 60;
 
 export default function Login() {
   const setSession = useAuthStore((s) => s.setSession);
+  const setScope = useAuthStore((s) => s.setScope);
   const params = useLocalSearchParams<{ next?: string }>();
   const nextParam = typeof params.next === 'string' ? params.next : undefined;
   const [cooldown, setCooldown] = useState(0);
@@ -52,6 +54,13 @@ export default function Login() {
       reconcileCartForUser(data.user.id);
       reconcileReceiptDraftForUser(data.user.id);
       reconcileKiemDraftForUser(data.user.id);
+      // Nạp scope (nông trạm / vùng) — SAU setSession vì client gọi cần Bearer token.
+      // Fail-open: scope lỗi (backend cũ, mạng chập) không chặn login; UI mobile
+      // sẽ hiển thị "chưa gán trạm" và fallback về createdBy khi lọc.
+      try {
+        const scope = await getMyScope();
+        setScope(scope);
+      } catch { /* để null — lọc mine=1 sẽ fallback createdBy */ }
       const target = safeResolveNext(nextParam) ?? '/';
       router.replace(target as never);
     },

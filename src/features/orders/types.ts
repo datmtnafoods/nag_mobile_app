@@ -60,6 +60,12 @@ export type Party = {
   /** Ngày sinh, ISO 'YYYY-MM-DD'. */
   dob?: string;
   gender?: 'nam' | 'nu';
+  // ─ Attribution — backend enrich sẵn tên KTV tạo (batch từ users) để mobile hiện
+  //   "Người tạo: X · Ngày Y" mà không cần lookup riêng. Cả 3 optional vì mock
+  //   không luôn set.
+  createdBy?: string;
+  createdByName?: string | null;
+  createdAt?: string;
 };
 
 export type OrderLine = {

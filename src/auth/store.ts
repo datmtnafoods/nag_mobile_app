@@ -1,18 +1,24 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import type { User } from '../features/auth/types';
+import type { MyScope } from '../api/erp/users';
 
 const TOKEN_KEY = 'nag.access_token';
 const USER_KEY = 'nag.user';
 const PERMS_KEY = 'nag.permissions';
 
+// scope KHÔNG persist: mỗi phiên hydrate lại từ backend để admin gán trạm mới là
+// user thấy ngay (không cần logout/login). Rẻ: 1 request, dữ liệu nhỏ.
+
 type AuthState = {
   token: string | null;
   user: User | null;
   permissions: string[];
+  scope: MyScope | null;
   hydrated: boolean;
   hydrate: () => Promise<void>;
   setSession: (session: { token: string; user: User; permissions: string[] }) => Promise<void>;
+  setScope: (scope: MyScope | null) => void;
   clearSession: () => Promise<void>;
   hasPerm: (perm: string) => boolean;
   canAny: (perms: string[]) => boolean;
@@ -23,6 +29,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   user: null,
   permissions: [],
+  scope: null,
   hydrated: false,
   hydrate: async () => {
     try {
@@ -47,15 +54,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       SecureStore.setItemAsync(USER_KEY, JSON.stringify(user)),
       SecureStore.setItemAsync(PERMS_KEY, JSON.stringify(permissions)),
     ]);
-    set({ token, user, permissions });
+    // scope reset để login screen (hoặc caller) fetch mới — tránh dùng scope của
+    // user vừa logout xong cho user vừa login vào.
+    set({ token, user, permissions, scope: null });
   },
+  setScope: (scope) => set({ scope }),
   clearSession: async () => {
     await Promise.all([
       SecureStore.deleteItemAsync(TOKEN_KEY),
       SecureStore.deleteItemAsync(USER_KEY),
       SecureStore.deleteItemAsync(PERMS_KEY),
     ]);
-    set({ token: null, user: null, permissions: [] });
+    set({ token: null, user: null, permissions: [], scope: null });
   },
   hasPerm: (perm) => {
     const perms = get().permissions;
@@ -90,4 +100,9 @@ export function useCanAny(perms: string[]) {
     if (s.permissions.includes('*')) return true;
     return perms.some((p) => s.permissions.includes(p));
   });
+}
+
+/** Scope hiện tại — null nếu chưa nạp (login screen tự fetch sau khi setSession). */
+export function useMyScope() {
+  return useAuthStore((s) => s.scope);
 }
