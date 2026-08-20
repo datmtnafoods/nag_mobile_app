@@ -94,9 +94,28 @@ export default function VeRanh() {
   };
 
   const hoanTac = () => setRing((r) => r.slice(0, -1));
-  const xoaHet = () => {
+  const doXoaHet = () => {
     setRing([]);
     setCanhBao(null);
+    // Cho phép map re-center về GPS mới khi vẽ lại từ đầu — user thường muốn
+    // xem lại chỗ mình đang đứng để đặt đỉnh đầu tiên.
+    banDoRef.current?.resetGpsJump();
+  };
+  const xoaHet = () => {
+    // Mode SỬA (plotId có): ranh đã lưu, xoá là mất → confirm chống lỡ tay.
+    // Mode VẼ MỚI: chưa lưu gì → xoá luôn cho nhanh.
+    if (plotId) {
+      Alert.alert(
+        'Xoá toàn bộ ranh?',
+        'Ranh cũ sẽ mất, phải vẽ lại 3+ đỉnh rồi Lưu.',
+        [
+          { text: 'Huỷ', style: 'cancel' },
+          { text: 'Xoá', style: 'destructive', onPress: doXoaHet },
+        ],
+      );
+      return;
+    }
+    doXoaHet();
   };
 
   // Luồng SỬA: PATCH backend + refetch chi tiết thửa. onSuccess → back.

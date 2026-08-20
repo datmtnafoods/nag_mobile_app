@@ -6,7 +6,12 @@ import { BAN_DO_HTML } from './banDoHtml';
 
 export type BanDoMode = 've' | 'xem';
 export type GpsPoint = { lng: number; lat: number; doChinhXac?: number };
-export type BanDoRanhHandle = { themDinhTaiGps: (gps: GpsPoint) => void };
+export type BanDoRanhHandle = {
+  themDinhTaiGps: (gps: GpsPoint) => void;
+  /** Cho phép RN yêu cầu bản đồ "quên" lần jump GPS trước — dùng khi user xoá
+   *  hết ring để vẽ lại: setGps kế sẽ tự re-center về GPS mới. */
+  resetGpsJump: () => void;
+};
 
 // Bản tin RN → Page.
 type ToPage =
@@ -15,7 +20,8 @@ type ToPage =
   | { type: 'setMode'; mode: BanDoMode }
   | { type: 'setGps'; gps: GpsPoint | null }
   | { type: 'setOtherRings'; rings: Ring[] }
-  | { type: 'addMyLocation'; gps: GpsPoint };
+  | { type: 'addMyLocation'; gps: GpsPoint }
+  | { type: 'resetGpsJump' };
 
 type Props = {
   mode: BanDoMode;
@@ -69,7 +75,10 @@ export const BanDoRanh = forwardRef<BanDoRanhHandle, Props>(function BanDoRanh(
 
   useImperativeHandle(
     ref,
-    () => ({ themDinhTaiGps: (g: GpsPoint) => post({ type: 'addMyLocation', gps: g }) }),
+    () => ({
+      themDinhTaiGps: (g: GpsPoint) => post({ type: 'addMyLocation', gps: g }),
+      resetGpsJump: () => post({ type: 'resetGpsJump' }),
+    }),
     [post],
   );
 

@@ -325,6 +325,9 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
       }
       return;
     }
+    // Cho phép RN yêu cầu "quên" lần jump trước (user xoá hết để vẽ lại) ⇒ setGps
+    // kế sẽ auto-flyTo về GPS mới, KTV đỡ pan tay tìm vị trí.
+    if(m.type === 'resetGpsJump'){ daJumpToGps = false; return; }
     if(m.type === 'setOtherRings'){ other = m.rings || []; refreshOther(); return; }
     if(m.type === 'addMyLocation'){
       if(!m.gps) return;
