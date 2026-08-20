@@ -117,7 +117,7 @@ export async function getMoves(input: {
 // ============ PHIẾU (list + detail) ============
 
 export async function listReceipts(query: ListReceiptsQuery): Promise<Paginated<PhieuHeader>> {
-  const { kind, khoId, status, nccId, from, to, q, page = 1, pageSize = 50 } = query;
+  const { kind, khoId, status, nccId, partyId, from, to, q, page = 1, pageSize = 50 } = query;
   if (MOCK_API) {
     const needle = q?.trim().toLowerCase();
     const filtered = MOCK_PHIEU_STORE.filter((p) => {
@@ -125,12 +125,13 @@ export async function listReceipts(query: ListReceiptsQuery): Promise<Paginated<
       if (khoId && p.khoId !== khoId) return false;
       if (status && status !== 'all' && p.trangThai !== status) return false;
       if (nccId && p.kind === 'nhap' && p.nccId !== nccId) return false;
+      if (partyId && !(p.kind === 'ban' && p.partyId === partyId)) return false;
       if (from && p.taoLuc < from) return false;
       if (to && p.taoLuc > to) return false;
       if (needle) {
         const hay = `${p.id} ${p.partnerTen ?? ''} ${
           p.kind === 'nhap' ? p.ncc ?? '' : ''
-        } ${p.kind === 'ban' ? p.nongHoTen ?? '' : ''}`.toLowerCase();
+        } ${p.kind === 'ban' ? p.partyName ?? '' : ''}`.toLowerCase();
         return hay.includes(needle);
       }
       return true;
@@ -157,8 +158,15 @@ export async function listReceipts(query: ListReceiptsQuery): Promise<Paginated<
   const path =
     kind === 'nhap' ? '/kho/phieu-nhap' : kind === 'ban' ? '/kho/phieu-ban' : '/kho/phieu-kiem';
   const { data } = await client.get<Paginated<PhieuHeader>>(path, {
-    params: { khoId, status, nccId, from, to, q, page, pageSize },
+    params: { khoId, status, nccId, partyId, from, to, q, page, pageSize },
   });
+  // BACKEND CHƯA LỌC theo partyId — `svc.listPhieuBan()` không nhận tham số, chỉ
+  // `core/list.js` cắt offset/limit. Lọc lại ở client để màn "lịch sử mua của hộ"
+  // không hiện phiếu của hộ khác. Bỏ được khi BE thêm filter (xem PROGRESS).
+  if (partyId) {
+    const rows = data.data.filter((p) => p.kind === 'ban' && p.partyId === partyId);
+    return { data: rows, meta: { ...data.meta, total: rows.length } };
+  }
   return data;
 }
 
@@ -460,6 +468,12 @@ export async function createPhieuBan(body: CreateReceiptBody): Promise<PhieuFull
     if (!body.dongHang.length) {
       throw new MockApiError('Phiếu phải có ít nhất một dòng hàng.', 'empty_dong_hang', 400);
     }
+    // Khách hàng BẮT BUỘC — mirror backend `kho/service.js` (đổi 2026-08-19, bỏ
+    // "khách lẻ"). Mock không được dễ dãi hơn thật, không thì demo qua nhưng
+    // real mode 400.
+    if (!body.partyId) {
+      throw new MockApiError('Phiếu bán phải có khách hàng.', 'thieu_khach_hang', 400);
+    }
     // Aggregate check overstock theo vatTuId
     const groupBase: Record<string, number> = {};
     for (const d of body.dongHang) {
@@ -488,9 +502,11 @@ export async function createPhieuBan(body: CreateReceiptBody): Promise<PhieuFull
       kind: 'ban',
       khoId: body.khoId,
       khoTen: kho?.ten,
-      partnerTen: body.nongHoTen ?? (body.nongHoId ? undefined : 'Khách lẻ'),
-      nongHoId: body.nongHoId,
-      nongHoTen: body.nongHoTen,
+      partnerTen: body.partyName,
+      partyId: body.partyId,
+      partyName: body.partyName,
+      partyKind: body.partyKind ?? 'household',
+      giamGia: body.giamGia,
       trangThai: 'ghi',
       ghiChu: body.ghiChu,
       tongSoLuong: totals.tongSoLuong,

@@ -155,7 +155,9 @@ export default function NewPhieuBan() {
   }
 
   const hasOverstock = Object.keys(overstockWarnings).length > 0;
-  const canSubmit = Boolean(khoId) && lines.length > 0 && Boolean(partner) && !hasOverstock;
+  // `partner.id` chứ không chỉ `partner`: khách phải có hồ sơ thật (backend ném
+  // 400 `thieu_khach_hang` nếu thiếu partyId).
+  const canSubmit = Boolean(khoId) && lines.length > 0 && Boolean(partner?.id) && !hasOverstock;
 
   return (
     <SafeAreaView className="flex-1 bg-bg-soft" edges={['bottom']}>
@@ -240,15 +242,18 @@ export default function NewPhieuBan() {
               </Pressable>
             }
           >
-            {partner ? (
-              <View>
-                <Text className="text-body text-ink font-semibold">{partner.ten}</Text>
-                {partner.kind === 'khachLe' ? (
-                  <Text className="text-caption text-ink-muted">Khách lẻ (không lưu thông tin)</Text>
-                ) : null}
+            {partner?.id ? (
+              <View className="flex-row items-center">
+                <Ionicons name="person-circle-outline" size={20} color="#166534" />
+                <View className="ml-2 flex-1">
+                  <Text className="text-body text-ink font-semibold">{partner.ten}</Text>
+                  <Text className="text-small text-ink-muted font-mono">{partner.id}</Text>
+                </View>
               </View>
             ) : (
-              <Text className="text-caption text-ink-muted py-2">Chưa chọn khách</Text>
+              <Text className="text-caption text-ink-muted py-2">
+                Chưa chọn khách — mỗi phiếu bán phải gắn một hồ sơ nông hộ.
+              </Text>
             )}
           </WizardSection>
 

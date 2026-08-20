@@ -134,13 +134,13 @@ function nextPartyId(kind: PartyKind): string {
 /**
  * Tạo nông hộ.
  *
- * BACKEND CHƯA CÓ ENDPOINT NÀY — `modules/party` cố ý chỉ có `repo.js`, không
- * `routes.js` (nông hộ hiện chỉ đẻ ra như tác dụng phụ của kích hoạt tem).
- * Mock dựng sẵn đầy đủ để luồng "đến thửa" chạy được ngay; khi flip
- * `MOCK_API=0` sẽ nhận 404 và người gọi phải bắt để báo cho người dùng.
+ * BACKEND ĐÃ SẴN SÀNG (kiểm 2026-08-20): `POST /parties` có ở
+ * `nag_erp_api/src/modules/party/routes.js` (`requirePerm('party:create')`, trả
+ * 201), và `field_staff` ĐÃ có `party:create` trong `core/rbac.js` — đổi chính
+ * sách 2026-08 để KTV tạo được hộ ngay tại vườn. Chạy được ở real mode.
  *
- * Ngoài ra `field_staff` theo RBAC mặc định KHÔNG có `party:create` — backend
- * sẽ phải nới quyền khi dựng endpoint thật.
+ * Mock chặn trùng SĐT/CCCD y như ràng buộc backend (`party_phone.phone` là PK)
+ * để lúc nối thật không vỡ.
  */
 export async function createParty(input: CreatePartyInput): Promise<Party> {
   if (MOCK_API) {
@@ -193,8 +193,7 @@ export async function createParty(input: CreatePartyInput): Promise<Party> {
     MOCK_PARTIES.push(party);
     return party;
   }
-  // `...input` đã mang cccd/dob/gender; backend cần thêm cột + nới RBAC
-  // `party:create` cho field_staff (xem doc-comment trên) trước khi flip MOCK_API=0.
+  // `...input` đã mang cccd/dob/gender — backend cần cột tương ứng cho 3 field này.
   // Backend trả object trần (201) — nag_erp_api/src/modules/party/routes.js.
   const { data } = await client.post<Party>('/parties', {
     ...input,

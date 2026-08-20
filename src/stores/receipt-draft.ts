@@ -187,12 +187,13 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
           if (soHoaDon) body.soHoaDon = soHoaDon;
           if (giamGia != null) body.giamGia = giamGia;
         } else if (kind === 'ban') {
-          if (partner?.kind === 'nongHo') {
-            body.nongHoId = partner.id;
-            body.nongHoTen = partner.ten;
-          } else {
-            body.nongHoTen = partner?.ten ?? 'Khách lẻ';
-          }
+          // Khách hàng BẮT BUỘC có hồ sơ — backend ném 400 `thieu_khach_hang`
+          // nếu thiếu partyId. Chặn ngay ở đây thay vì để server từ chối.
+          if (!partner?.id) return null;
+          body.partyId = partner.id;
+          body.partyName = partner.ten;
+          body.partyKind = 'household';
+          if (giamGia != null) body.giamGia = giamGia;
         }
         return body;
       },

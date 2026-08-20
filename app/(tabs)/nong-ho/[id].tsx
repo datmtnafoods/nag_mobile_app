@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { getParty } from '../../../src/api/erp/parties';
 import { listPlotsKemHo } from '../../../src/api/erp/growing-areas';
+import { listReceipts } from '../../../src/api/erp/warehouse';
+import { formatVND } from '../../../src/features/vat-tu/format';
 import { ThuaDatCard } from '../../../src/features/den-thua/components/ThuaDatCard';
 import { Button } from '../../../src/components/Button';
 import { ErrorState } from '../../../src/components/ErrorState';
@@ -41,6 +43,12 @@ export default function NongHoDetail() {
   const plotsQuery = useQuery({
     queryKey: ['thua-by-party', partyId],
     queryFn: () => listPlotsKemHo({ partyId }),
+    enabled: Boolean(partyId),
+  });
+  // Lịch sử mua vật tư — phiếu bán đã ghi sổ của hộ này.
+  const muaQuery = useQuery({
+    queryKey: ['receipts', 'ban', partyId],
+    queryFn: () => listReceipts({ kind: 'ban', partyId, status: 'ghi' }),
     enabled: Boolean(partyId),
   });
 
@@ -150,6 +158,53 @@ export default function NongHoDetail() {
         <View className="mt-3">
           <Button label="Tạo thửa cho hộ" variant="secondary" onPress={taoThua} />
         </View>
+
+        {/* Lịch sử mua vật tư */}
+        <View className="flex-row items-center justify-between mt-6 mb-2">
+          <Text className="text-caption text-ink-muted uppercase">
+            Lịch sử mua vật tư
+            {muaQuery.data?.data.length ? ` (${muaQuery.data.data.length})` : ''}
+          </Text>
+        </View>
+
+        {muaQuery.isPending ? (
+          <View className="items-center py-6">
+            <ActivityIndicator color="#dd1c2e" />
+          </View>
+        ) : (muaQuery.data?.data ?? []).length > 0 ? (
+          <View className="rounded-card bg-white border border-border overflow-hidden">
+            {(muaQuery.data?.data ?? []).map((p, i, arr) => (
+              <Pressable
+                key={p.id}
+                onPress={() => router.push(`/vat-tu/ban-hang/${p.id}` as never)}
+                className={`flex-row items-center p-3 active:bg-bg-soft ${
+                  i < arr.length - 1 ? 'border-b border-border' : ''
+                }`}
+                accessibilityRole="button"
+                accessibilityLabel={`Phiếu bán ${p.id}`}
+              >
+                <View className="h-9 w-9 rounded-input bg-amber-100 items-center justify-center mr-3">
+                  <Ionicons name="cart-outline" size={18} color="#92400e" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-caption text-ink font-semibold font-mono">{p.id}</Text>
+                  <Text className="text-small text-ink-muted">{formatVn(p.taoLuc)}</Text>
+                </View>
+                <Text className="text-caption text-ink font-semibold mr-1">
+                  {formatVND(p.tongTien)}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <View className="rounded-card bg-white border border-border p-5 items-center">
+            <Ionicons name="cart-outline" size={36} color="#d1d5db" />
+            <Text className="text-caption text-ink-muted mt-2 text-center">
+              Chưa có giao dịch mua vật tư.
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

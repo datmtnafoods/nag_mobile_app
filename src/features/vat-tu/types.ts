@@ -176,10 +176,22 @@ export interface PhieuNhap extends PhieuBaseCommon {
   dongHang: DongHangNhapLieu[];
 }
 
+/**
+ * Phiếu bán. Khách hàng BẮT BUỘC có hồ sơ (`partyId`) — backend
+ * `kho/service.js` ném 400 `thieu_khach_hang` nếu thiếu (đổi 2026-08-19: bỏ
+ * "khách lẻ", thay bằng "tạo nhanh hộ mới" ngay khi bán).
+ *
+ * `partyId?` để optional CHỈ vì phiếu cũ trong store có thể chưa có — mọi phiếu
+ * tạo mới đều phải có.
+ */
 export interface PhieuBan extends PhieuBaseCommon {
   kind: 'ban';
-  nongHoId?: string;
-  nongHoTen?: string;
+  partyId?: string;
+  partyName?: string;
+  /** Loại đối tác — mobile luôn gửi 'household'. */
+  partyKind?: string;
+  /** Giảm giá tổng phiếu (backend hỗ trợ cho cả nhập lẫn bán). */
+  giamGia?: number;
   dongHang: DongHangNhapLieu[];
 }
 
@@ -223,10 +235,14 @@ export interface DraftLine {
   donGia?: number;
 }
 
+/**
+ * Đối tác đang chọn trong wizard. Với bán (`nongHo`), `id` LUÔN phải có — khách
+ * hàng bắt buộc gắn hồ sơ (xem `PhieuBan`). Nhánh `khachLe` đã bỏ 2026-08-19.
+ */
 export interface PartnerDraft {
   id?: string;
   ten?: string;
-  kind: 'ncc' | 'nongHo' | 'khachLe';
+  kind: 'ncc' | 'nongHo';
 }
 
 /** Body tạo phiếu nhập/bán. */
@@ -237,11 +253,12 @@ export interface CreateReceiptBody {
   nccId?: string;
   expectedOn?: string;
   soHoaDon?: string;
+  // Bán — khách hàng BẮT BUỘC (backend 400 `thieu_khach_hang` nếu thiếu partyId).
+  partyId?: string;
+  partyName?: string;
+  partyKind?: string;
+  // Chung — `giamGia` backend nhận cho CẢ nhập lẫn bán.
   giamGia?: number;
-  // Bán
-  nongHoId?: string;
-  nongHoTen?: string;
-  // Chung
   ghiChu?: string;
   anh: string[];
   dongHang: DongHangNhapLieu[];
@@ -263,6 +280,8 @@ export interface ListReceiptsQuery {
   khoId?: string;
   status?: PhieuTrangThai | 'all';
   nccId?: string;
+  /** Lọc phiếu BÁN theo hồ sơ nông hộ — dùng ở màn chi tiết hộ. */
+  partyId?: string;
   from?: string;
   to?: string;
   q?: string;

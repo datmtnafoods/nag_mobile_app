@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, Image } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, Image, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { getMoves, getReceipt, huyPhieu } from '../../../src/api/erp/warehouse';
+import { getParty } from '../../../src/api/erp/parties';
 import { apiErrorMessage } from '../../../src/api/client';
 import { useCurrentUser } from '../../../src/auth/store';
 import { canCancelReceipt, permsForVatTu } from '../../../src/features/vat-tu/perms';
@@ -41,6 +42,16 @@ export default function PhieuBanDetail() {
     queryKey: ['moves', { chungTuId: receiptId }],
     queryFn: () => getMoves({ chungTuId: receiptId }),
     enabled: !!receiptId && q.data?.phieu.trangThai !== 'ke_hoach',
+  });
+
+  // Hồ sơ khách hàng — join để hiện SĐT/địa chỉ thay vì mỗi mã party thô.
+  // Khai TRƯỚC các early-return bên dưới để thứ tự hook không đổi giữa các render.
+  const phieuBan = q.data?.phieu.kind === 'ban' ? q.data.phieu : undefined;
+  const partyId = phieuBan?.partyId;
+  const partyQuery = useQuery({
+    queryKey: ['party', partyId],
+    queryFn: () => getParty(partyId!),
+    enabled: Boolean(partyId),
   });
 
   const cancelMut = useMutation({
@@ -128,11 +139,31 @@ export default function PhieuBanDetail() {
             <Text className="text-caption text-ink-muted ml-2">Khách hàng</Text>
           </View>
           <Text className="text-body text-ink font-semibold">
-            {phieu.nongHoTen ?? 'Khách lẻ'}
+            {partyQuery.data?.name ?? phieu.partyName ?? 'Chưa rõ'}
           </Text>
-          {phieu.nongHoId ? (
-            <Text className="text-caption text-ink-muted">{phieu.nongHoId}</Text>
+          {partyQuery.data?.phones[0] ? (
+            <Text className="text-caption text-ink-muted">{partyQuery.data.phones[0]}</Text>
           ) : null}
+          {partyQuery.data?.address ?? partyQuery.data?.commune ? (
+            <Text className="text-small text-ink-muted mt-0.5">
+              {partyQuery.data?.address ?? partyQuery.data?.commune}
+            </Text>
+          ) : null}
+          {phieu.partyId ? (
+            <Pressable
+              onPress={() => router.push(`/nong-ho/${phieu.partyId}` as never)}
+              accessibilityRole="button"
+              accessibilityLabel="Xem hồ sơ nông hộ"
+              hitSlop={8}
+              className="flex-row items-center mt-2 self-start"
+            >
+              <Text className="text-caption text-primary font-semibold">Xem hồ sơ</Text>
+              <Ionicons name="chevron-forward" size={14} color="#dd1c2e" />
+            </Pressable>
+          ) : (
+            // Phiếu tạo trước 2026-08-19 (thời "khách lẻ") — không có hồ sơ để mở.
+            <Text className="text-small text-ink-muted mt-1">Phiếu cũ · chưa gắn hồ sơ</Text>
+          )}
           {phieu.viTri ? (
             <View className="mt-2 pt-2 border-t border-border">
               <ViTriRow viTri={phieu.viTri} nhan={`Phiếu bán ${phieu.id}`} />

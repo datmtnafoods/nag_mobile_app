@@ -366,8 +366,9 @@ const P3: PhieuBan = {
   khoId: 'kho_tr_gl',
   khoTen: 'Kho Trạm Gia Lai',
   partnerTen: 'Nguyễn Văn A',
-  nongHoId: 'p_001',
-  nongHoTen: 'Nguyễn Văn A',
+  partyId: 'p_001',
+  partyName: 'Nguyễn Văn A',
+  partyKind: 'household',
   trangThai: 'ghi',
   tongSoLuong: 5,
   tongTien: 140000,
@@ -388,8 +389,10 @@ const P4: PhieuBan = {
   kind: 'ban',
   khoId: 'kho_tr_gl',
   khoTen: 'Kho Trạm Gia Lai',
+  // Phiếu cũ thời "khách lẻ" (trước 2026-08-19) — cố ý KHÔNG có partyId để test
+  // nhánh hiển thị "Phiếu cũ · chưa gắn hồ sơ" ở màn chi tiết.
   partnerTen: 'Khách lẻ',
-  nongHoTen: 'Khách lẻ',
+  partyName: 'Khách lẻ',
   trangThai: 'huy',
   tongSoLuong: 3,
   tongTien: 135000,
