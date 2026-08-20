@@ -28,12 +28,22 @@ export function ThuaDatCard({ thua, khoangCachM, onPress }: Props) {
       <View className="flex-row items-start justify-between mb-2">
         <View className="flex-1 pr-2">
           <Text className="text-body text-ink font-semibold">
-            {thua.tenHo ?? 'Chưa rõ nông hộ'}
+            {thua.tenHo ?? 'Chưa gán nông hộ'}
           </Text>
           <Text className="text-caption text-ink-muted font-mono mt-0.5">{thua.id}</Text>
         </View>
-        <View className={`rounded-input px-2 py-1 ${meta.bg}`}>
-          <Text className={`text-small font-semibold ${meta.text}`}>{meta.nhan}</Text>
+        <View className="items-end">
+          <View className={`rounded-input px-2 py-1 ${meta.bg}`}>
+            <Text className={`text-small font-semibold ${meta.text}`}>{meta.nhan}</Text>
+          </View>
+          {/* Badge cảnh báo thửa mồ côi — nhắc KTV gán hộ sau. Xuất hiện dưới
+              chip status, không phá layout list. */}
+          {!thua.partyId ? (
+            <View className="rounded-input px-2 py-1 bg-red-50 border border-red-200 mt-1 flex-row items-center">
+              <Ionicons name="warning-outline" size={12} color="#b91c1c" />
+              <Text className="text-small font-semibold text-red-700 ml-1">Chưa gán hộ</Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
