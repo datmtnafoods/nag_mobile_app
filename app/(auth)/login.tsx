@@ -20,6 +20,15 @@ import { useAuthStore } from '../../src/auth/store';
 // Email luôn nhớ (rẻ, không phải bí mật); password chỉ khi user tick checkbox.
 const LAST_EMAIL_KEY = 'nag.last_email';
 const LAST_PASSWORD_KEY = 'nag.last_password';
+
+// Tài khoản test seed sẵn ở backend dev — bấm chip điền nhanh, đỡ gõ lại
+// khi iterate. CHỈ hiển thị khi __DEV__ (Metro dev/preview) + backend thật;
+// production bundle không thấy. Mật khẩu là DEFAULT_PASSWORD của backend
+// (nag_erp_api/src/modules/auth/password.js:6) — đổi ở đó thì đồng bộ đây.
+const DEV_LOGIN_HINTS: Array<{ email: string; label: string; password: string }> = [
+  { email: 'dung.pt@nafoods.com', label: 'Dung · Gia Lai', password: 'Nafoods@2026' },
+  { email: 'thao.pp@nafoods.com', label: 'Thảo · Kon Tum', password: 'Nafoods@2026' },
+];
 import { safeResolveNext } from '../../src/auth/next';
 import { reconcileCartForUser } from '../../src/stores/cart';
 import { reconcileReceiptDraftForUser } from '../../src/stores/receipt-draft';
@@ -248,9 +257,33 @@ export default function Login() {
               <Text className="text-small text-amber-900 mt-2">Mật khẩu chung: 123456</Text>
             </View>
           ) : (
-            <Text className="text-small text-ink-soft text-center mt-6">
-              Backend: {API_BASE_URL}
-            </Text>
+            <View className="mt-6 opacity-70">
+              <Text className="text-small text-ink-soft text-center">
+                Backend: {API_BASE_URL}
+              </Text>
+              {__DEV__ ? (
+                <View className="mt-2">
+                  <Text className="text-small text-ink-soft text-center mb-1">
+                    Tài khoản test (dev only)
+                  </Text>
+                  <View className="flex-row flex-wrap justify-center -mx-1">
+                    {DEV_LOGIN_HINTS.map((h) => (
+                      <Pressable
+                        key={h.email}
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setValue('email', h.email, { shouldValidate: false });
+                          setValue('password', h.password, { shouldValidate: false });
+                        }}
+                        className="mx-1 mb-1 rounded-input bg-bg-soft border border-border px-2 py-1"
+                      >
+                        <Text className="text-small text-ink-muted">{h.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+            </View>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
