@@ -120,9 +120,13 @@ export function ChonNhieuCayXen({ label, giaTri, onChange, loaiTru }: Props) {
           <Ionicons name="add-circle-outline" size={18} color="#9ca3af" style={{ marginRight: 8 }} />
           <TextInput
             className="flex-1 text-body text-ink"
-            // Ép padding=0 + tắt padding font Android (cùng lý do như Input.tsx) —
-            // không thì chữ bị viền cắt trong khung h-input=44 với lineHeight=24.
-            style={{ paddingVertical: 0, includeFontPadding: false }}
+            // Xem chuỗi fix ở Input.tsx — cần đủ 4 điểm để chữ không bị viền cắt.
+            style={{
+              paddingVertical: 0,
+              includeFontPadding: false,
+              lineHeight: 20,
+              textAlignVertical: 'center',
+            }}
             placeholder="Thêm cây khác…"
             placeholderTextColor="#9ca3af"
             value={input}

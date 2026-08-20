@@ -100,9 +100,13 @@ export function QuantityStepper({ sku, value, unit, onChange, step = 1 }: Props)
             selectTextOnFocus
             accessibilityLabel="Số lượng"
             className="w-16 text-center text-body text-ink font-semibold"
-            // Xem lý do ở Input.tsx — TextInput trong khung h-input=44 bị crop
-            // trên/dưới nếu không triệt paddingVertical + padding font Android.
-            style={{ paddingVertical: 0, includeFontPadding: false }}
+            // Xem chuỗi fix ở Input.tsx.
+            style={{
+              paddingVertical: 0,
+              includeFontPadding: false,
+              lineHeight: 20,
+              textAlignVertical: 'center',
+            }}
           />
           <Pressable
             onPress={inc}

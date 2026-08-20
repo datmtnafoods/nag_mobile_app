@@ -27,7 +27,7 @@ module.exports = {
         },
       },
       spacing: {
-        input: '44px',
+        input: '48px',
         button: '48px',
         header: '48px',
       },
