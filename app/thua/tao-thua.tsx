@@ -22,6 +22,7 @@ import { areaHa, centroid, tuCat } from '../../src/features/den-thua/geo';
 import { RanhThuaPreview } from '../../src/features/den-thua/components/RanhThuaPreview';
 import { BanDoRanh } from '../../src/features/den-thua/components/BanDoRanh';
 import { ChonCayTrong } from '../../src/features/den-thua/components/ChonCayTrong';
+import { CAY_XEN_GOI_Y } from '../../src/features/den-thua/cay-trong';
 import { TimelineCanhTac } from '../../src/features/den-thua/components/TimelineCanhTac';
 import {
   chiSoMocHienTai,
@@ -96,7 +97,13 @@ export default function TaoThua() {
         partyId,
         boundary: ringBanDo,
         cropName: cayTrong.trim() || undefined,
-        cropXen: xenCanh && cayXen.trim() ? cayXen.trim() : undefined,
+        // Cây xen chỉ lưu khi bật xen canh, có tên, VÀ khác cây chính (so tên chính xác).
+        cropXen:
+          xenCanh &&
+          cayXen.trim() &&
+          cayXen.trim().toLowerCase() !== cayTrong.trim().toLowerCase()
+            ? cayXen.trim()
+            : undefined,
         ngayGoc: ngayGoc ? new Date(ngayGoc).toISOString() : undefined,
         note: ghiChu.trim() || undefined,
       });
@@ -141,6 +148,12 @@ export default function TaoThua() {
   const ranhXoan = ringBanDo.length >= 4 && tuCat(ringBanDo);
   const buoc1Xong = ringBanDo.length >= 3 && !ranhXoan;
   const buoc2Xong = hoHopLe(hoKq);
+
+  // Cây xen trùng cây chính = vô nghĩa → cảnh báo (và không lưu ở mutation).
+  const xenTrungCayChinh =
+    xenCanh &&
+    Boolean(cayXen.trim()) &&
+    cayXen.trim().toLowerCase() === cayTrong.trim().toLowerCase();
 
   // Xem trước lịch canh tác từ cây chính + ngày kích hoạt (cùng logic màn chi tiết).
   const lichPreview = useMemo(() => nhanDangCayTrong(cayTrong), [cayTrong]);
@@ -253,7 +266,12 @@ export default function TaoThua() {
 
               {/* Cây trồng + xen canh */}
               <View className="rounded-card bg-white border border-border p-4 mb-4">
-                <ChonCayTrong label="Cây trồng" giaTri={cayTrong} onChange={setCayTrong} />
+                <ChonCayTrong
+                  label="Cây trồng chính"
+                  giaTri={cayTrong}
+                  onChange={setCayTrong}
+                  loaiTru={xenCanh && cayXen.trim() ? [cayXen] : undefined}
+                />
 
                 <View className="flex-row items-center justify-between py-1">
                   <View className="flex-1 pr-3">
@@ -272,11 +290,18 @@ export default function TaoThua() {
                 {xenCanh ? (
                   <View className="mt-3">
                     <ChonCayTrong
-                      label="Cây xen"
+                      label="Cây xen (khác cây chính)"
                       giaTri={cayXen}
                       onChange={setCayXen}
                       placeholder="Chọn hoặc gõ cây trồng xen…"
+                      goiY={CAY_XEN_GOI_Y}
+                      loaiTru={cayTrong.trim() ? [cayTrong] : undefined}
                     />
+                    {xenTrungCayChinh ? (
+                      <Text className="text-small text-red-600 -mt-2">
+                        Cây xen phải khác cây trồng chính.
+                      </Text>
+                    ) : null}
                   </View>
                 ) : null}
               </View>

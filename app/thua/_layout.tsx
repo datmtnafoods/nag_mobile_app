@@ -34,6 +34,7 @@ export default function ThuaLayout() {
         options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
       />
       <Stack.Screen name="[id]" options={{ title: 'Chi tiết thửa' }} />
+      <Stack.Screen name="sua/[id]" options={{ title: 'Sửa thông tin thửa' }} />
       <Stack.Screen name="nhat-ky" options={{ title: 'Nhật ký canh tác' }} />
     </Stack>
   );

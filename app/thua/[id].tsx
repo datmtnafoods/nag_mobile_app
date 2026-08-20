@@ -186,8 +186,21 @@ export default function ChiTietThua() {
               <Text className="text-h2 text-ink">{thua.tenHo ?? 'Chưa rõ nông hộ'}</Text>
               <Text className="text-caption text-ink-muted font-mono mt-0.5">{thua.id}</Text>
             </View>
-            <View className={`rounded-input px-2 py-1 ${meta.bg}`}>
-              <Text className={`text-small font-semibold ${meta.text}`}>{meta.nhan}</Text>
+            <View className="items-end">
+              <View className={`rounded-input px-2 py-1 ${meta.bg}`}>
+                <Text className={`text-small font-semibold ${meta.text}`}>{meta.nhan}</Text>
+              </View>
+              {/* Sửa thông tin thửa (cây trồng/xen/ngày/ghi chú) — khác "Sửa ranh" ở thẻ ranh. */}
+              <Pressable
+                onPress={() => router.push(`/thua/sua/${thua.id}` as never)}
+                accessibilityRole="button"
+                accessibilityLabel="Sửa thông tin thửa"
+                hitSlop={8}
+                className="mt-2 flex-row items-center active:opacity-70"
+              >
+                <Ionicons name="create-outline" size={16} color="#dd1c2e" />
+                <Text className="text-caption text-primary font-semibold ml-1">Sửa thông tin</Text>
+              </Pressable>
             </View>
           </View>
           <View className="flex-row flex-wrap mt-1">

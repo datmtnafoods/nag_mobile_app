@@ -158,7 +158,9 @@ export async function ganNongHoChoThua(plotId: string, partyId: string): Promise
  */
 export async function updatePlot(
   plotId: string,
-  patch: Partial<Pick<CreateThuaDatBody, 'boundary' | 'cropName' | 'cropXen' | 'note' | 'partyId'>>,
+  patch: Partial<
+    Pick<CreateThuaDatBody, 'boundary' | 'cropName' | 'cropXen' | 'note' | 'partyId' | 'ngayGoc'>
+  >,
 ): Promise<ThuaDat> {
   if (patch.boundary) {
     const loi = validateRing(patch.boundary);
@@ -177,9 +179,13 @@ export async function updatePlot(
     if (patch.cropXen !== undefined) thua.cropXen = patch.cropXen?.trim() || undefined;
     if (patch.note !== undefined) thua.note = patch.note?.trim() || null;
     if (patch.partyId !== undefined) thua.partyId = patch.partyId || null;
+    // Backend chưa có cột `planted_at` — mock giữ riêng (giống createPlot).
+    if (patch.ngayGoc !== undefined) thua.ngayGoc = patch.ngayGoc;
     return thua;
   }
-  const { data } = await client.patch<ThuaDat>(`/growing-areas/plots/${plotId}`, patch);
+  // Backend chưa có cột `planted_at` — bỏ `ngayGoc` khỏi payload (gửi lên sẽ bị bỏ im lặng).
+  const { ngayGoc: _boQua, ...payload } = patch;
+  const { data } = await client.patch<ThuaDat>(`/growing-areas/plots/${plotId}`, payload);
   return data;
 }
 
