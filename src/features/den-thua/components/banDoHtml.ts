@@ -59,6 +59,9 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
   var ring = [];        // [[lng,lat], ...] — nguồn sự thật của hình đang vẽ
   var other = [];       // ranh thửa khác (chỉ xem)
   var gps = null;       // {lng,lat,doChinhXac}
+  // Đã tự-jump về GPS chưa (lần đầu). Tránh giật view khi GPS update liên tục,
+  // và tôn trọng thao tác nếu user đã bắt đầu vẽ (ring ≥ 1 đỉnh).
+  var daJumpToGps = false;
   var centerFallback = null;  // căn về đây khi chưa có đỉnh/GPS/thửa nào ([lng,lat])
   var dragIndex = null;
   var lpTimer = null;
@@ -311,7 +314,17 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
     }
     if(m.type === 'setRing'){ ring = m.ring || []; refreshDraft(); return; } // KHÔNG fit: tránh nhảy khi Hoàn tác/Xoá
     if(m.type === 'setMode'){ mode = m.mode || 've'; refreshDraft(); return; }
-    if(m.type === 'setGps'){ gps = m.gps || null; refreshGps(); return; }
+    if(m.type === 'setGps'){
+      gps = m.gps || null;
+      refreshGps();
+      // Lần đầu có GPS + ring chưa vẽ đỉnh nào ⇒ flyTo vị trí thực tế của KTV
+      // (mặc kệ centerFallback stale). Sau lần đầu bỏ qua để không giật view.
+      if(gps && !daJumpToGps && ring.length === 0){
+        map.flyTo({center:[gps.lng, gps.lat], zoom:17, duration:600});
+        daJumpToGps = true;
+      }
+      return;
+    }
     if(m.type === 'setOtherRings'){ other = m.rings || []; refreshOther(); return; }
     if(m.type === 'addMyLocation'){
       if(!m.gps) return;
