@@ -1,4 +1,4 @@
-import type { LichCayTrong, LoaiMoc, MocCanhTac } from './types';
+import type { LichCayTrong, LoaiMoc, LoaiNhatKy, MocCanhTac } from './types';
 
 /**
  * Lịch chuẩn vòng đời cây trồng.
@@ -28,6 +28,14 @@ export const LICH_CANH_TAC: Record<string, LichCayTrong> = {
     ],
     chuKy: { thangDiCanh: 2, thangThuHoach: 3 },
     soLuaToiDa: 8,
+    // Giai đoạn nào thì loại việc nào hay làm — để form đẩy chip gợi ý lên trước.
+    goiYTheoGiaiDoan: {
+      kich_hoat: ['canh_tac'],
+      kien_thiet: ['canh_tac', 'bon_phan'],
+      lam_bong: ['bon_phan', 'phun_thuoc', 'canh_tac'],
+      di_canh: ['canh_tac', 'bon_phan'],
+      thu_hoach: ['thu_hoach', 'phun_thuoc'],
+    },
   },
   // Cà phê / bơ / ổi: KHUNG ĐÃ SẴN, chưa có lịch thật.
   // Cố ý để trống thay vì bịa — thửa cây chưa có lịch sẽ không hiện timeline,
@@ -56,6 +64,18 @@ export function nhanDangCayTrong(cropName?: string | null): LichCayTrong | null 
     if (lich.tuKhoa.some((k) => ten.includes(boDau(k)))) return lich;
   }
   return null;
+}
+
+/**
+ * Loại nhật ký nên gợi ý cho giai đoạn (`LoaiMoc`) hiện tại của thửa. Cây chưa có
+ * hồ sơ hoặc giai đoạn không khai → trả `[]` (form hiện mọi loại ngang nhau).
+ */
+export function goiYLoaiTheoGiaiDoan(
+  lich: LichCayTrong | null,
+  giaiDoan?: LoaiMoc,
+): LoaiNhatKy[] {
+  if (!lich?.goiYTheoGiaiDoan || !giaiDoan) return [];
+  return lich.goiYTheoGiaiDoan[giaiDoan] ?? [];
 }
 
 function themThang(goc: Date, thang: number): Date {

@@ -1,5 +1,10 @@
 import { client, MOCK_API } from '../client';
-import type { CreateNhatKyBody, NhatKyCanhTac } from '../../features/den-thua/types';
+import type {
+  ChiTietNhatKy,
+  ChiTietPhunThuoc,
+  CreateNhatKyBody,
+  NhatKyCanhTac,
+} from '../../features/den-thua/types';
 import { MOCK_NHAT_KY, nextNhatKyId } from '../../mocks/den-thua.mock';
 
 /**
@@ -28,6 +33,28 @@ function todayShort(): string {
   ).padStart(2, '0')}`;
 }
 
+/** Cộng n ngày vào 1 ngày ISO → 'YYYY-MM-DD'. */
+function themNgay(iso: string, n: number): string {
+  const d = new Date(iso);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate(),
+  ).padStart(2, '0')}`;
+}
+
+/**
+ * Mô phỏng backend: sinh field DERIVED. Với `phun_thuoc`, ngày an toàn thu hoạch
+ * = ngày phun + thời gian cách ly (client KHÔNG gửi giá trị này). Backend thật sẽ
+ * tính y hệt ở tầng service.
+ */
+function tinhChiTietServer(body: CreateNhatKyBody): ChiTietNhatKy | undefined {
+  if (body.loai === 'phun_thuoc' && body.chiTiet && body.ngay) {
+    const ct = body.chiTiet as ChiTietPhunThuoc;
+    return { ...ct, ngayAnToanThuHoach: themNgay(body.ngay, ct.thoiGianCachLy) };
+  }
+  return body.chiTiet;
+}
+
 export async function listNhatKy(query: { plotId?: string } = {}): Promise<NhatKyCanhTac[]> {
   if (MOCK_API) {
     await new Promise((r) => setTimeout(r, MOCK_DELAY));
@@ -49,7 +76,9 @@ export async function taoNhatKy(body: CreateNhatKyBody): Promise<NhatKyCanhTac> 
       plotId: body.plotId,
       partyId: body.partyId,
       loai: body.loai,
+      ngay: body.ngay,
       moTa: body.moTa?.trim() || undefined,
+      chiTiet: tinhChiTietServer(body),
       anh: body.anh ?? [],
       ghiAmUri: body.ghiAmUri,
       ghiAmGiay: body.ghiAmGiay,

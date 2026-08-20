@@ -72,8 +72,14 @@ export interface CreateThuaDatBody {
 // trong `07_task.sql` (kind='field_visit', có growing_plot_id) để đợt nối
 // backend chỉ phải đổi tầng API, không phải đổi UI.
 
-export type LoaiNhatKy = 'ban_vat_tu' | 'tinh_trang_cay' | 'tu_van' | 'thu_hoach';
+export type LoaiNhatKy =
+  | 'canh_tac'
+  | 'bon_phan'
+  | 'phun_thuoc'
+  | 'thu_hoach'
+  | 'tinh_trang_cay';
 
+/** Dòng vật tư/dụng cụ dùng trong 1 lần canh tác — ghi nhận thôi, KHÔNG trừ tồn kho. */
 export interface DongVatTuNhatKy {
   vatTuId: string;
   tenSku: string;
@@ -81,18 +87,74 @@ export interface DongVatTuNhatKy {
   soLuong: number;
 }
 
+// ── Túi trường theo loại (`chiTiet`) ────────────────────────────────────────
+// Mỗi `loai` mang thêm field VietGAP riêng. Giữ khung chung (moTa/anh/viTri/…),
+// nhét phần đặc thù vào `chiTiet` để không phình record chung.
+
+export interface ChiTietBonPhan {
+  tenPhan: string;
+  /** hữu cơ / vô cơ / vi sinh / phân bón lá */
+  loaiPhan?: string;
+  luong: number;
+  /** kg, lít, g… */
+  donVi: string;
+  cachBon?: string;
+  ghiChu?: string;
+}
+
+export interface ChiTietPhunThuoc {
+  dichHai: string;
+  tenThuoc: string;
+  hoatChat?: string;
+  lieuLuong?: string;
+  luongNuoc?: number;
+  /** Thời gian cách ly (ngày). */
+  thoiGianCachLy: number;
+  /**
+   * Ngày an toàn thu hoạch = `ngay` + `thoiGianCachLy`. DERIVED — backend/mock
+   * TỰ TÍNH, client KHÔNG gửi (mirror cách `nguoiTao` ép từ JWT).
+   */
+  ngayAnToanThuHoach?: string;
+  ghiChu?: string;
+}
+
+export interface ChiTietCanhTac {
+  thoiTiet?: string;
+  ghiChu?: string;
+}
+
+export interface ChiTietThuHoach {
+  sanLuong?: number;
+  phanHang?: string;
+  /** Mã lô truy xuất (mã thửa + ngày, VD CL-01-100626). */
+  maTruyXuat?: string;
+  khoiLuongBan?: number;
+  daKiemTraCachLy?: boolean;
+  ghiChu?: string;
+}
+
+export type ChiTietNhatKy =
+  | ChiTietBonPhan
+  | ChiTietPhunThuoc
+  | ChiTietCanhTac
+  | ChiTietThuHoach;
+
 export interface NhatKyCanhTac {
   id: string; // NK-YYMMDD-nn
   plotId: string;
   partyId: string;
   loai: LoaiNhatKy;
+  /** Ngày làm việc thực tế (ISO 'YYYY-MM-DD') — tách khỏi `taoLuc` (ngày nhập). */
+  ngay?: string;
   moTa?: string;
+  /** Field VietGAP theo loại. */
+  chiTiet?: ChiTietNhatKy;
   /** Ảnh data URL (mock) — backend thật sẽ là objectKey MinIO. */
   anh: string[];
   /** URI file ghi âm cục bộ. Backend HIỆN CHẶN audio nên chưa upload được. */
   ghiAmUri?: string;
   ghiAmGiay?: number;
-  /** Chỉ có khi loai='ban_vat_tu'. Ghi nhận thôi — KHÔNG trừ tồn kho. */
+  /** Vật tư/dụng cụ dùng khi canh tác. Ghi nhận thôi — KHÔNG trừ tồn kho. */
   dongVatTu?: DongVatTuNhatKy[];
   viTri?: ViTri;
   nguoiTao: string;
@@ -103,7 +165,10 @@ export interface CreateNhatKyBody {
   plotId: string;
   partyId: string;
   loai: LoaiNhatKy;
+  ngay?: string;
   moTa?: string;
+  /** Field VietGAP theo loại — client KHÔNG set `ngayAnToanThuHoach`. */
+  chiTiet?: ChiTietNhatKy;
   anh: string[];
   ghiAmUri?: string;
   ghiAmGiay?: number;
@@ -136,6 +201,11 @@ export interface LichCayTrong {
   /** Chu kỳ lặp sau lứa đầu: +thangDiCanh đi cành, +thangThuHoach thu lứa kế. */
   chuKy: { thangDiCanh: number; thangThuHoach: number };
   soLuaToiDa: number;
+  /**
+   * Gợi ý loại nhật ký theo giai đoạn (`LoaiMoc`) hiện tại của thửa. Giai đoạn
+   * không có trong map → không gợi ý riêng, form hiện mọi loại ngang nhau.
+   */
+  goiYTheoGiaiDoan?: Partial<Record<LoaiMoc, LoaiNhatKy[]>>;
 }
 
 export interface MocCanhTac {
