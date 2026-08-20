@@ -1,11 +1,9 @@
 /**
  * Quyền cho luồng "đến thửa".
  *
- * CỐ Ý không dùng lại `features/vat-tu/perms.ts`: bảng đó map theo bộ role
- * riêng của kho (`kho_staff`, `tram_staff`, `kho_manager`…) không khớp `RoleId`
- * trong `features/auth/types.ts`, và KHÔNG có `field_staff` — đúng vai dùng màn
- * này. Ở đây đọc thẳng `permissions` mà backend trả lúc đăng nhập, khớp
- * `core/rbac.js`.
+ * Đọc thẳng `permissions` backend trả lúc đăng nhập, khớp `core/rbac.js`.
+ * `features/vat-tu/perms.ts` nay cũng làm y hệt (trước đó nó tự map từ role với
+ * bộ role không tồn tại ở backend — đã bỏ 2026-08-20).
  */
 
 export const PERM_XEM_THUA = 'activation:view';
@@ -27,9 +25,8 @@ export function permsDenThua(permissions: string[] | undefined): DenThuaPerms {
   return {
     xemThua: co(permissions, PERM_XEM_THUA),
     veThua: co(permissions, PERM_VE_THUA),
-    // ⚠️ `field_staff` theo RBAC mặc định KHÔNG có `party:create` (rbac.js cố ý:
-    // "tra và hoàn thiện hồ sơ hộ, KHÔNG tạo mới"). Backend sẽ phải nới quyền
-    // khi dựng `POST /parties`. Bản mock bỏ qua để demo được trọn luồng.
+    // `field_staff` ĐÃ có `party:create` (rbac.js đổi chính sách 2026-08: KTV tạo
+    // được hộ ngay tại vườn) và `POST /parties` đã dựng — chạy được real mode.
     taoHo: co(permissions, PERM_TAO_HO),
   };
 }

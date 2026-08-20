@@ -19,7 +19,7 @@ import {
   listKho,
 } from '../../../src/api/erp/warehouse';
 import { apiErrorMessage } from '../../../src/api/client';
-import { useCurrentUser } from '../../../src/auth/store';
+import { usePermissions } from '../../../src/auth/store';
 import { canCreateReceipt, permsForVatTu } from '../../../src/features/vat-tu/perms';
 import { formatQty, formatVND } from '../../../src/features/vat-tu/format';
 import { useReceiptDraftStore } from '../../../src/stores/receipt-draft';
@@ -34,8 +34,8 @@ import { ViTriBadge } from '../../../src/features/location/components/ViTriBadge
 import { useDeviceLocation } from '../../../src/hooks/useDeviceLocation';
 
 export default function NewPhieuNhap() {
-  const user = useCurrentUser();
-  const perms = permsForVatTu(user?.roles);
+  const permissions = usePermissions();
+  const perms = permsForVatTu(permissions);
   const qc = useQueryClient();
 
   const {

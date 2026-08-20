@@ -11,7 +11,7 @@ import {
   huyPhieu,
 } from '../../../src/api/erp/warehouse';
 import { apiErrorMessage } from '../../../src/api/client';
-import { useCurrentUser } from '../../../src/auth/store';
+import { usePermissions } from '../../../src/auth/store';
 import { canCancelReceipt, canCreateReceipt, permsForVatTu } from '../../../src/features/vat-tu/perms';
 import {
   formatDate,
@@ -32,8 +32,8 @@ import { convertToBase } from '../../../src/features/vat-tu/unit-convert';
 export default function PhieuNhapDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const receiptId = typeof id === 'string' ? id : '';
-  const user = useCurrentUser();
-  const perms = permsForVatTu(user?.roles);
+  const permissions = usePermissions();
+  const perms = permsForVatTu(permissions);
   const canCancel = canCancelReceipt(perms);
   const canNhap = canCreateReceipt(perms, 'nhap');
   const qc = useQueryClient();

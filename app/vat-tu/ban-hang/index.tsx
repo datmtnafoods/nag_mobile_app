@@ -12,7 +12,7 @@ import { EmptyState } from '../../../src/components/EmptyState';
 import { ErrorState } from '../../../src/components/ErrorState';
 import { FilterChip } from '../../../src/components/FilterChip';
 import type { PhieuTrangThai } from '../../../src/features/vat-tu/types';
-import { useCurrentUser } from '../../../src/auth/store';
+import { usePermissions } from '../../../src/auth/store';
 import { canCreateReceipt, permsForVatTu } from '../../../src/features/vat-tu/perms';
 import { useReceiptDraftStore } from '../../../src/stores/receipt-draft';
 
@@ -25,8 +25,8 @@ const STATUS_OPTIONS: Array<{ id: StatusFilter; label: string }> = [
 
 export default function BanHangList() {
   const [status, setStatus] = useState<StatusFilter>('all');
-  const user = useCurrentUser();
-  const perms = permsForVatTu(user?.roles);
+  const permissions = usePermissions();
+  const perms = permsForVatTu(permissions);
   const canCreate = canCreateReceipt(perms, 'ban');
   const startDraft = useReceiptDraftStore((s) => s.startDraft);
 

@@ -13,7 +13,7 @@ import {
 } from '../../../src/api/erp/warehouse';
 import { getVatTu } from '../../../src/api/erp/catalog-supplies';
 import { apiErrorMessage } from '../../../src/api/client';
-import { useCurrentUser } from '../../../src/auth/store';
+import { usePermissions } from '../../../src/auth/store';
 import {
   canCancelReceipt,
   canDoInventoryCount,
@@ -36,8 +36,8 @@ import type { PhieuKiemKe } from '../../../src/features/vat-tu/types';
 export default function PhieuKiemDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const receiptId = typeof id === 'string' ? id : '';
-  const user = useCurrentUser();
-  const perms = permsForVatTu(user?.roles);
+  const permissions = usePermissions();
+  const perms = permsForVatTu(permissions);
   const canKiem = canDoInventoryCount(perms);
   const canCancel = canCancelReceipt(perms);
   const qc = useQueryClient();

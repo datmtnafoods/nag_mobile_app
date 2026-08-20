@@ -91,6 +91,11 @@ export function useCurrentUser() {
   return useAuthStore((s) => s.user);
 }
 
+/** Danh sách quyền của phiên (backend trả lúc đăng nhập). `['*']` = admin. */
+export function usePermissions() {
+  return useAuthStore((s) => s.permissions);
+}
+
 export function useHasPerm(perm: string) {
   return useAuthStore((s) => s.permissions.includes('*') || s.permissions.includes(perm));
 }

@@ -32,7 +32,7 @@ import { KhoTonChip } from '../../../src/features/vat-tu/components/KhoTonChip';
 import { TheKhoRow } from '../../../src/features/vat-tu/components/TheKhoRow';
 import { formatVND, formatQty } from '../../../src/features/vat-tu/format';
 import type { MaKieu, VatTu } from '../../../src/features/vat-tu/types';
-import { useCurrentUser } from '../../../src/auth/store';
+import { usePermissions } from '../../../src/auth/store';
 import { canManageCatalog, permsForVatTu } from '../../../src/features/vat-tu/perms';
 import { MAX_ANH_PER_SKU } from '../../../src/features/vat-tu/anh';
 
@@ -41,8 +41,8 @@ const MA_KIEU_OPTIONS: MaKieu[] = ['qr', 'barcode', 'datamatrix', 'khac'];
 export default function SkuDetail() {
   const params = useLocalSearchParams<{ id?: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
-  const user = useCurrentUser();
-  const perms = permsForVatTu(user?.roles);
+  const permissions = usePermissions();
+  const perms = permsForVatTu(permissions);
   const canManage = canManageCatalog(perms);
   const qc = useQueryClient();
 

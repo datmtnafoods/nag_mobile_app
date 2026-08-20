@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { getMoves, getReceipt, huyPhieu } from '../../../src/api/erp/warehouse';
 import { getParty } from '../../../src/api/erp/parties';
 import { apiErrorMessage } from '../../../src/api/client';
-import { useCurrentUser } from '../../../src/auth/store';
+import { usePermissions } from '../../../src/auth/store';
 import { canCancelReceipt, permsForVatTu } from '../../../src/features/vat-tu/perms';
 import {
   formatDate,
@@ -27,8 +27,8 @@ import type { PhieuBan } from '../../../src/features/vat-tu/types';
 export default function PhieuBanDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const receiptId = typeof id === 'string' ? id : '';
-  const user = useCurrentUser();
-  const perms = permsForVatTu(user?.roles);
+  const permissions = usePermissions();
+  const perms = permsForVatTu(permissions);
   const canCancel = canCancelReceipt(perms);
   const qc = useQueryClient();
   const [showCancel, setShowCancel] = useState(false);

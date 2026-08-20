@@ -11,15 +11,15 @@ import { SkuRow } from '../../src/features/vat-tu/components/SkuRow';
 import { EmptyState } from '../../src/components/EmptyState';
 import { ErrorState } from '../../src/components/ErrorState';
 import { FilterChip } from '../../src/components/FilterChip';
-import { useCurrentUser } from '../../src/auth/store';
+import { usePermissions } from '../../src/auth/store';
 import { canManageCatalog, permsForVatTu } from '../../src/features/vat-tu/perms';
 
 export default function DanhMuc() {
   const [q, setQ] = useState('');
   const [loaiId, setLoaiId] = useState<string | undefined>(undefined);
   const [includeNgung, setIncludeNgung] = useState(false);
-  const user = useCurrentUser();
-  const perms = permsForVatTu(user?.roles);
+  const permissions = usePermissions();
+  const perms = permsForVatTu(permissions);
   const canManage = canManageCatalog(perms);
 
   const loaiQuery = useQuery({

@@ -15,7 +15,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { createPhieuBan, getStock, listKho } from '../../../src/api/erp/warehouse';
 import { apiErrorMessage } from '../../../src/api/client';
-import { useCurrentUser } from '../../../src/auth/store';
+import { usePermissions } from '../../../src/auth/store';
 import { canCreateReceipt, permsForVatTu } from '../../../src/features/vat-tu/perms';
 import { formatQty, formatVND } from '../../../src/features/vat-tu/format';
 import { convertToBase } from '../../../src/features/vat-tu/unit-convert';
@@ -30,8 +30,8 @@ import { ViTriBadge } from '../../../src/features/location/components/ViTriBadge
 import { useDeviceLocation } from '../../../src/hooks/useDeviceLocation';
 
 export default function NewPhieuBan() {
-  const user = useCurrentUser();
-  const perms = permsForVatTu(user?.roles);
+  const permissions = usePermissions();
+  const perms = permsForVatTu(permissions);
   const qc = useQueryClient();
 
   const {

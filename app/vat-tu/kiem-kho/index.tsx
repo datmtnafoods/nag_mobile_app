@@ -11,7 +11,7 @@ import { EmptyState } from '../../../src/components/EmptyState';
 import { ErrorState } from '../../../src/components/ErrorState';
 import { FilterChip } from '../../../src/components/FilterChip';
 import type { PhieuTrangThai } from '../../../src/features/vat-tu/types';
-import { useCurrentUser } from '../../../src/auth/store';
+import { usePermissions } from '../../../src/auth/store';
 import { canDoInventoryCount, permsForVatTu } from '../../../src/features/vat-tu/perms';
 import { useKiemDraftStore } from '../../../src/stores/kiem-draft';
 
@@ -26,8 +26,8 @@ const STATUS_OPTIONS: Array<{ id: StatusFilter; label: string }> = [
 export default function KiemKhoList() {
   const [status, setStatus] = useState<StatusFilter>('all');
   const [khoId, setKhoId] = useState<string | undefined>(undefined);
-  const user = useCurrentUser();
-  const perms = permsForVatTu(user?.roles);
+  const permissions = usePermissions();
+  const perms = permsForVatTu(permissions);
   const canCreate = canDoInventoryCount(perms);
   const startDraft = useKiemDraftStore((s) => s.startDraft);
 

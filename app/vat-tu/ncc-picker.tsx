@@ -10,7 +10,7 @@ import { Input } from '../../src/components/Input';
 import { EmptyState } from '../../src/components/EmptyState';
 import { useReceiptDraftStore } from '../../src/stores/receipt-draft';
 import { NccQuickCreateModal } from '../../src/features/vat-tu/components/NccQuickCreateModal';
-import { useCurrentUser } from '../../src/auth/store';
+import { usePermissions } from '../../src/auth/store';
 import { canCreateNcc, permsForVatTu } from '../../src/features/vat-tu/perms';
 
 export default function NccPicker() {
@@ -19,8 +19,8 @@ export default function NccPicker() {
   const [createErr, setCreateErr] = useState<string | null>(null);
   const setPartner = useReceiptDraftStore((s) => s.setPartner);
   const qc = useQueryClient();
-  const user = useCurrentUser();
-  const perms = permsForVatTu(user?.roles);
+  const permissions = usePermissions();
+  const perms = permsForVatTu(permissions);
   const canCreate = canCreateNcc(perms);
 
   const nccQuery = useQuery({
