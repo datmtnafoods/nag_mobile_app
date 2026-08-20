@@ -23,6 +23,10 @@ type Props = {
   ring: Ring;
   /** Chỉ 've': page bắn ring mới mỗi lần thêm/kéo/chèn/xoá đỉnh. */
   onChangeRing?: (ring: Ring) => void;
+  /** Chỉ 've': page bắn khi user chạm gần đỉnh đầu để đóng vòng (≥3 đỉnh).
+   *  Parent thường gọi finalize (`xong()`) — không cần validate lại, xoắn thì
+   *  page vẫn cho đóng, RN quyết chặn/warn. */
+  onRingClosed?: (ring: Ring) => void;
   /** GPS thiết bị để vẽ chấm xanh + căn bản đồ. */
   gps?: GpsPoint | null;
   /** Ranh thửa khác (chỉ xem) để tránh vẽ đè. */
@@ -41,7 +45,7 @@ type Props = {
  * xuống page. Mọi tính toán hình học nằm ở RN (`geo.ts`), không ở page.
  */
 export const BanDoRanh = forwardRef<BanDoRanhHandle, Props>(function BanDoRanh(
-  { mode, ring, onChangeRing, gps, otherRings, initialCenter, onMapError, height },
+  { mode, ring, onChangeRing, onRingClosed, gps, otherRings, initialCenter, onMapError, height },
   ref,
 ) {
   const webRef = useRef<WebView>(null);
@@ -90,12 +94,19 @@ export const BanDoRanh = forwardRef<BanDoRanhHandle, Props>(function BanDoRanh(
         onChangeRing?.(msg.ring);
         return;
       }
+      if (msg.type === 'ringClosed' && msg.ring) {
+        // Đóng vòng do user chạm gần đỉnh đầu — không gây change event mới,
+        // parent tự finalize (thường gọi xong()).
+        echo.current = JSON.stringify(msg.ring);
+        onRingClosed?.(msg.ring);
+        return;
+      }
       if (msg.type === 'error') {
         onMapError?.(msg.reason ?? 'Không tải được bản đồ.');
         return;
       }
     },
-    [mode, ring, otherRings, initialCenter, onChangeRing, onMapError, inject],
+    [mode, ring, otherRings, initialCenter, onChangeRing, onRingClosed, onMapError, inject],
   );
 
   // Đẩy thay đổi từ parent xuống page. Dùng "key" chuỗi hoá để tránh churn tham chiếu.

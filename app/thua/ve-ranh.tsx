@@ -97,6 +97,19 @@ export default function VeRanh() {
     router.back();
   };
 
+  // Callback từ bản đồ khi user chạm gần đỉnh đầu (chấm xanh to). Ring đầu ra
+  // chưa qua validate xoắn — kiểm lại như logic nút Xong; xoắn thì cảnh báo
+  // thay vì đóng ngầm.
+  const dongVongTuBanDo = (ringMoi: Ring) => {
+    if (ringMoi.length < 3) return;
+    if (tuCat(ringMoi)) {
+      setCanhBao('Ranh bị xoắn — kéo lại đỉnh cho hết cắt chéo trước khi đóng vòng.');
+      return;
+    }
+    datRing(ringMoi);
+    router.back();
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: '#111827' }}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -107,6 +120,7 @@ export default function VeRanh() {
         mode="ve"
         ring={ring}
         onChangeRing={setRing}
+        onRingClosed={dongVongTuBanDo}
         gps={gps}
         initialCenter={initialCenter}
         onMapError={setMapLoi}
@@ -155,9 +169,15 @@ export default function VeRanh() {
             {xoan ? (
               <Text style={styles.pillXoanText}>Ranh bị xoắn — kéo lại đỉnh cho hết cắt chéo</Text>
             ) : soDinh >= 3 ? (
-              <Text style={styles.pillText}>
-                {soDinh} đỉnh · {areaHa(ring).toLocaleString('vi-VN')} ha · chu vi ~{chuViM(ring)} m
-              </Text>
+              <>
+                <Text style={styles.pillText}>
+                  {soDinh} đỉnh · {areaHa(ring).toLocaleString('vi-VN')} ha · chu vi ~{chuViM(ring)} m
+                </Text>
+                {/* Hint đóng vòng bằng chạm — user không cần bấm nút. */}
+                <Text style={styles.pillHintText}>
+                  Chạm chấm xanh (đỉnh đầu) để đóng vòng, hoặc bấm Xong
+                </Text>
+              </>
             ) : (
               <Text style={styles.pillText}>
                 Chạm ≥3 góc thửa trên ảnh vệ tinh{soDinh > 0 ? ` · đã có ${soDinh}` : ''}
@@ -169,7 +189,14 @@ export default function VeRanh() {
               <Button label="Huỷ" variant="secondary" onPress={() => router.back()} />
             </View>
             <View style={{ flex: 1 }}>
-              <Button label="Xong" disabled={!coTheXong} onPress={xong} />
+              {/* Xanh chốt khi đủ điều kiện — nổi hẳn trên pill/nền vệ tinh đỏ.
+                  Label kèm diện tích để user thấy rõ sẽ lưu bao nhiêu ha. */}
+              <Button
+                label={coTheXong ? `Xong · ${areaHa(ring).toLocaleString('vi-VN')} ha` : 'Xong'}
+                variant={coTheXong ? 'success' : 'primary'}
+                disabled={!coTheXong}
+                onPress={xong}
+              />
             </View>
           </View>
         </View>
@@ -280,6 +307,7 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   pillText: { color: '#9f1239', fontSize: 12, fontWeight: '700' },
+  pillHintText: { color: '#166534', fontSize: 11, fontWeight: '600', marginTop: 2, textAlign: 'center' },
   pillXoan: { backgroundColor: '#fef2f2', borderColor: '#b91c1c' },
   pillXoanText: { color: '#b91c1c', fontSize: 12, fontWeight: '700' },
   bottomRow: { flexDirection: 'row', gap: 8 },

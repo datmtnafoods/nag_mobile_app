@@ -106,8 +106,15 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
         f.push({type:'Feature', properties:{role:'mid', edge:e}, geometry:{type:'Point', coordinates: mid(ring[e], ring[(e+1)%ring.length])}});
       }
     }
+    // canClose = đỉnh đầu KHI ring đã đủ 3 điểm — nó là "nút Xong" trên bản đồ.
+    // Layer draft-vertex đọc để đổi màu, user tự thấy "chạm chấm này để đóng".
+    var canCloseFirst = ring.length >= 3;
     for(var i=0;i<ring.length;i++){
-      f.push({type:'Feature', properties:{role:'vertex', i:i, first:(i===0?1:0)}, geometry:{type:'Point', coordinates: ring[i]}});
+      f.push({type:'Feature', properties:{
+        role:'vertex', i:i,
+        first:(i===0?1:0),
+        canClose: (i===0 && canCloseFirst ? 1 : 0),
+      }, geometry:{type:'Point', coordinates: ring[i]}});
     }
     return {type:'FeatureCollection', features:f};
   }
@@ -146,7 +153,16 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
     map.addLayer({id:'draft-fill', type:'fill', source:'draft', filter:['==',['get','role'],'poly'], paint:{'fill-color':MAU,'fill-opacity':0.22}});
     map.addLayer({id:'draft-line', type:'line', source:'draft', filter:['==',['geometry-type'],'LineString'], paint:{'line-color':MAU,'line-width':2.5}});
     map.addLayer({id:'draft-mid', type:'circle', source:'draft', filter:['==',['get','role'],'mid'], paint:{'circle-radius':6,'circle-color':'rgba(255,255,255,0.65)','circle-stroke-width':1.5,'circle-stroke-color':MAU}});
-    map.addLayer({id:'draft-vertex', type:'circle', source:'draft', filter:['==',['get','role'],'vertex'], paint:{'circle-radius':['case',['==',['get','first'],1],11,9],'circle-color':'#fff','circle-stroke-width':3,'circle-stroke-color':MAU}});
+    // Đỉnh "chốt" (đỉnh đầu khi ring đã đủ 3 điểm): to hơn + viền XANH (khác đỏ)
+    // để user tự bắt = chấm đóng vòng. Các đỉnh khác: đỏ + nhỏ hơn.
+    map.addLayer({id:'draft-vertex', type:'circle', source:'draft',
+      filter:['==',['get','role'],'vertex'],
+      paint:{
+        'circle-radius':['case',['==',['get','canClose'],1],13,['==',['get','first'],1],11,9],
+        'circle-color':'#fff',
+        'circle-stroke-width':['case',['==',['get','canClose'],1],4,3],
+        'circle-stroke-color':['case',['==',['get','canClose'],1],'#166534',MAU],
+      }});
   }
 
   function refreshDraft(){ var s = map.getSource('draft'); if(s) s.setData(draftFC()); }
@@ -189,9 +205,21 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
   }
   function clearLp(){ if(lpTimer){ clearTimeout(lpTimer); lpTimer = null; } }
 
+  // Đỉnh đầu đóng vai "chốt" khi ring đủ 3 điểm: chạm gần nó = tự đóng vòng —
+  // chuẩn Google Maps polygon draw. UI hiện đã render đỉnh đầu to hơn (radius 11
+  // vs 9, xem draft-vertex layer) nên user tự thấy chấm "khác các đỉnh khác".
+  function nearFirstVertex(pt){
+    if(ring.length < 3) return false;
+    var p = px(ring[0]);
+    return Math.hypot(p.x-pt.x, p.y-pt.y) <= CLOSE_PX;
+  }
   function bindEditing(){
     map.on('click', function(e){
       if(mode !== 've' || dragIndex !== null) return;
+      // Chạm gần đỉnh đầu khi ring ≥3 đỉnh: bắn ringClosed để RN auto-finish
+      // (không đẻ đỉnh mới). Ưu tiên trước nearAnyVertex vì đỉnh đầu cũng thuộc
+      // nhóm "any vertex" — nếu để nearAnyVertex chặn trước thì không đóng được.
+      if(nearFirstVertex(e.point)){ send({type:'ringClosed', ring:ring}); return; }
       if(nearAnyVertex(e.point)) return;                // chạm trúng đỉnh cũ: khỏi thêm trùng
       ring = ring.concat([ snap([e.lngLat.lng, e.lngLat.lat], e.point, -1) ]);
       emit();

@@ -2,7 +2,7 @@ import { useCallback, useRef } from 'react';
 import { Pressable, Text, ActivityIndicator } from 'react-native';
 import type { PressableProps, GestureResponderEvent } from 'react-native';
 
-type Variant = 'primary' | 'secondary' | 'ghost';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'success';
 
 type Props = Omit<PressableProps, 'children'> & {
   label: string;
@@ -25,6 +25,12 @@ const variants: Record<Variant, { container: string; text: string }> = {
   ghost: {
     container: 'bg-transparent active:bg-bg-soft',
     text: 'text-primary font-semibold text-base',
+  },
+  // "Chốt" (finalize/xác nhận). Xanh đậm khác đỏ primary — dùng ở nút Xong đè
+  // lên nền đỏ của bản đồ vẽ ranh: contrast rõ hẳn (ve-ranh.tsx).
+  success: {
+    container: 'bg-green-700 active:bg-green-800',
+    text: 'text-white font-semibold text-base',
   },
 };
 
