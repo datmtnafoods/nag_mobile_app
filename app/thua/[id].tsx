@@ -132,6 +132,9 @@ export default function ChiTietThua() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['thua', plotId] });
       qc.invalidateQueries({ queryKey: ['do-thua'] });
+      // Danh sách thửa + thửa-theo-hộ có thay đổi hộ chủ ⇒ refetch.
+      qc.invalidateQueries({ queryKey: ['thua-list'] });
+      qc.invalidateQueries({ queryKey: ['thua-by-party'] });
       setGanMo(false);
       setHoKq({ loai: 'chon', party: null });
     },

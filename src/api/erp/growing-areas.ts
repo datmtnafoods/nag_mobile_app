@@ -49,6 +49,22 @@ export async function listPlots(
 }
 
 /**
+ * Danh sách thửa kèm tên hộ — cho màn "Quản lý thửa" và "Chi tiết nông hộ".
+ * Lọc theo `partyId` để lấy thửa của một hộ. Join một lượt tránh N+1.
+ */
+export async function listPlotsKemHo(
+  query: { status?: ThuaDat['status']; partyId?: string } = {},
+): Promise<ThuaDatKemHo[]> {
+  const plots = await listPlots({ status: query.status });
+  const loc = query.partyId ? plots.filter((p) => p.partyId === query.partyId) : plots;
+  const parties = await getPartiesByIds(loc.map((p) => p.partyId));
+  return loc.map((p) => {
+    const ho = p.partyId ? parties[p.partyId] : undefined;
+    return { ...p, tenHo: ho?.name, dienThoaiHo: ho?.phones?.[0] };
+  });
+}
+
+/**
  * Lấy một thửa kèm tên hộ.
  *
  * Backend KHÔNG có `GET /growing-areas/plots/:id` — chỉ có list. Nên phải tải
@@ -99,12 +115,15 @@ export async function createPlot(body: CreateThuaDatBody): Promise<ThuaDat> {
     return thua;
   }
 
-  // Backend chỉ nhận đúng 4 field; gửi thêm areaHa/status/zoneId bị bỏ im lặng.
+  // Backend nhận: boundary, cropName, cropXen, note, partyId. Field khác bị bỏ im lặng.
   const payload: Record<string, unknown> = {
     boundary: body.boundary,
     cropName: body.cropName,
     note: body.note,
   };
+  // Cây xen: chỉ đính khi user bật toggle (backend cropXen NULLABLE, migration
+  // 2026-08-19_growing_plot_crop_xen.sql).
+  if (body.cropXen?.trim()) payload.cropXen = body.cropXen.trim();
   // Backend thật BẮT BUỘC partyId (400 nếu thiếu) — chỉ đính khi có. Thửa không
   // hộ là hành vi mock; nối thật thì phải nới `service.createPlot`.
   if (body.partyId) payload.partyId = body.partyId;

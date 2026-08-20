@@ -102,7 +102,12 @@ export default function TaoThua() {
       });
     },
     onSuccess: (thua) => {
+      // Bồi mọi cache list/detail thửa: `do-thua` = dò theo GPS ở tab Đến thửa;
+      // `thua-list` = danh sách chung; `thua-by-party` = thửa của một hộ ở màn
+      // chi tiết nông hộ. Thiếu 2 key sau ⇒ user vừa tạo xong không thấy hộ.
       qc.invalidateQueries({ queryKey: ['do-thua'] });
+      qc.invalidateQueries({ queryKey: ['thua-list'] });
+      qc.invalidateQueries({ queryKey: ['thua-by-party'] });
       qc.invalidateQueries({ queryKey: ['parties'] });
       if (thua.partyId) {
         Alert.alert(
