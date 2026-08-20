@@ -6,12 +6,20 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
 import { Button } from '../../src/components/Button';
 import { Input } from '../../src/components/Input';
 import { login, MOCK_LOGIN_HINTS } from '../../src/api/erp/auth';
 import { getMyScope } from '../../src/api/erp/users';
 import { apiErrorMessage, apiErrorStatus, MOCK_API, API_BASE_URL } from '../../src/api/client';
 import { useAuthStore } from '../../src/auth/store';
+
+// Nhớ email + password (opt-in) — điền sẵn cho lần sau. Không đụng session
+// token/user; đây chỉ là "danh thiếp" ghi lại credentials để form khỏi trống.
+// Email luôn nhớ (rẻ, không phải bí mật); password chỉ khi user tick checkbox.
+const LAST_EMAIL_KEY = 'nag.last_email';
+const LAST_PASSWORD_KEY = 'nag.last_password';
 import { safeResolveNext } from '../../src/auth/next';
 import { reconcileCartForUser } from '../../src/stores/cart';
 import { reconcileReceiptDraftForUser } from '../../src/stores/receipt-draft';
@@ -36,6 +44,10 @@ export default function Login() {
   const params = useLocalSearchParams<{ next?: string }>();
   const nextParam = typeof params.next === 'string' ? params.next : undefined;
   const [cooldown, setCooldown] = useState(0);
+  // `nho` = tick "Nhớ mật khẩu". Mặc định true nếu SecureStore đã có password
+  // đã lưu ở lần trước (user không phải nhấn lại). null lúc chưa hydrate xong
+  // để tránh nhấp nháy UI.
+  const [nho, setNho] = useState<boolean>(false);
 
   const {
     control,
@@ -47,10 +59,34 @@ export default function Login() {
     defaultValues: { email: '', password: '' },
   });
 
+  // Prefill sau khi mount — SecureStore async, không dùng làm defaultValues được.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [email, password] = await Promise.all([
+          SecureStore.getItemAsync(LAST_EMAIL_KEY),
+          SecureStore.getItemAsync(LAST_PASSWORD_KEY),
+        ]);
+        if (email) setValue('email', email, { shouldValidate: false });
+        if (password) {
+          setValue('password', password, { shouldValidate: false });
+          setNho(true);
+        }
+      } catch { /* SecureStore lỗi (thiết bị lạ) → form trắng, người dùng gõ */ }
+    })();
+  }, [setValue]);
+
   const loginMutation = useMutation({
     mutationFn: login,
-    onSuccess: async (data) => {
+    onSuccess: async (data, vars) => {
       await setSession({ token: data.token, user: data.user, permissions: data.permissions });
+      // Ghi credentials vào SecureStore — email luôn, password chỉ khi tick nhớ.
+      // Đặt trước navigate để write kịp trước khi screen unmount.
+      try {
+        await SecureStore.setItemAsync(LAST_EMAIL_KEY, vars.email);
+        if (nho) await SecureStore.setItemAsync(LAST_PASSWORD_KEY, vars.password);
+        else await SecureStore.deleteItemAsync(LAST_PASSWORD_KEY);
+      } catch { /* lưu credentials fail không chặn login OK */ }
       reconcileCartForUser(data.user.id);
       reconcileReceiptDraftForUser(data.user.id);
       reconcileKiemDraftForUser(data.user.id);
@@ -145,6 +181,22 @@ export default function Login() {
               />
             )}
           />
+
+          {/* Checkbox "Nhớ mật khẩu" — opt-in để không mặc định lưu credentials nhạy cảm.
+              Bấm cả hàng (icon + chữ) để hit-target rộng. */}
+          <Pressable
+            onPress={() => setNho((v) => !v)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: nho }}
+            className="flex-row items-center py-2 -mt-1 mb-2 active:opacity-70"
+          >
+            <Ionicons
+              name={nho ? 'checkbox' : 'square-outline'}
+              size={22}
+              color={nho ? '#dd1c2e' : '#9ca3af'}
+            />
+            <Text className="text-caption text-ink ml-2">Nhớ mật khẩu</Text>
+          </Pressable>
 
           {errorMessage ? (
             <View className="rounded-input bg-red-50 border border-red-200 p-3 mb-3">
