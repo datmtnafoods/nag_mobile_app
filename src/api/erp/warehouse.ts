@@ -62,10 +62,17 @@ class MockApiError extends Error {
 
 // ============ KHO / STOCK / MOVES ============
 
+/**
+ * Shape list của backend: `core/list.js#listResponse` → `{ rows, total }`.
+ * KHÔNG có envelope `{data}` ở bất kỳ route nào (đã rà `app.js` + `core/`), nên
+ * mọi nhánh real phải đọc `rows`.
+ */
+type BeList<T> = { rows: T[]; total: number };
+
 export async function listKho(): Promise<Kho[]> {
   if (MOCK_API) return delay(MOCK_KHO);
-  const { data } = await client.get<{ data: Kho[] }>('/kho');
-  return data.data;
+  const { data } = await client.get<BeList<Kho>>('/kho');
+  return data.rows ?? [];
 }
 
 export async function getStock(input: { khoId: string; vatTuId: string }): Promise<{
@@ -77,11 +84,11 @@ export async function getStock(input: { khoId: string; vatTuId: string }): Promi
     const sku = MOCK_VATTU.find((v) => v.id === vatTuId);
     return delay({ soLuong: sumStock(khoId, vatTuId), donViCoBan: sku?.donViCoBan ?? '' });
   }
-  const { data } = await client.get<{ data: Array<{ khoId: string; vatTuId: string; soLuong: number }> }>(
+  const { data } = await client.get<BeList<{ khoId: string; vatTuId: string; soLuong: number }>>(
     '/kho/ton',
     { params: { khoId, vatTuId } },
   );
-  const row = data.data[0];
+  const row = data.rows?.[0];
   const sku = row ? MOCK_VATTU.find((v) => v.id === row.vatTuId) : undefined;
   return { soLuong: row?.soLuong ?? 0, donViCoBan: sku?.donViCoBan ?? '' };
 }
@@ -89,8 +96,8 @@ export async function getStock(input: { khoId: string; vatTuId: string }): Promi
 /** Bảng tồn full list — dùng cho TonKho tab. */
 export async function tonKho(query: { khoId?: string } = {}): Promise<TonKhoRow[]> {
   if (MOCK_API) return delay(tonKhoTable(query.khoId));
-  const { data } = await client.get<{ data: TonKhoRow[] }>('/kho/ton', { params: query });
-  return data.data;
+  const { data } = await client.get<BeList<TonKhoRow>>('/kho/ton', { params: query });
+  return data.rows ?? [];
 }
 
 export async function getMoves(input: {
@@ -110,8 +117,8 @@ export async function getMoves(input: {
       }).sort((a, b) => b.taoLuc.localeCompare(a.taoLuc)),
     );
   }
-  const { data } = await client.get<{ data: KhoMove[] }>('/kho/moves', { params: input });
-  return data.data;
+  const { data } = await client.get<BeList<KhoMove>>('/kho/moves', { params: input });
+  return data.rows ?? [];
 }
 
 // ============ PHIẾU (list + detail) ============
@@ -140,69 +147,87 @@ export async function listReceipts(query: ListReceiptsQuery): Promise<Paginated<
   }
   if (kind === 'all') {
     const [nhap, ban, kiem] = await Promise.all([
-      client.get<Paginated<PhieuHeader>>('/kho/phieu-nhap', {
+      client.get<BeList<PhieuHeader>>('/kho/phieu-nhap', {
         params: { khoId, status, nccId, from, to, q, page, pageSize },
       }),
-      client.get<Paginated<PhieuHeader>>('/kho/phieu-ban', {
+      client.get<BeList<PhieuHeader>>('/kho/phieu-ban', {
         params: { khoId, status, from, to, q, page, pageSize },
       }),
-      client.get<Paginated<PhieuHeader>>('/kho/phieu-kiem', {
+      client.get<BeList<PhieuHeader>>('/kho/phieu-kiem', {
         params: { khoId, status, from, to, q, page, pageSize },
       }),
     ]);
-    const merged = [...nhap.data.data, ...ban.data.data, ...kiem.data.data].sort((a, b) =>
-      b.taoLuc.localeCompare(a.taoLuc),
-    );
+    const merged = [
+      ...(nhap.data.rows ?? []),
+      ...(ban.data.rows ?? []),
+      ...(kiem.data.rows ?? []),
+    ].sort((a, b) => b.taoLuc.localeCompare(a.taoLuc));
     return { data: merged, meta: { total: merged.length, page, pageSize } };
   }
   const path =
     kind === 'nhap' ? '/kho/phieu-nhap' : kind === 'ban' ? '/kho/phieu-ban' : '/kho/phieu-kiem';
-  const { data } = await client.get<Paginated<PhieuHeader>>(path, {
+  const { data } = await client.get<BeList<PhieuHeader>>(path, {
     params: { khoId, status, nccId, partyId, from, to, q, page, pageSize },
   });
-  // BACKEND CHƯA LỌC theo partyId — `svc.listPhieuBan()` không nhận tham số, chỉ
-  // `core/list.js` cắt offset/limit. Lọc lại ở client để màn "lịch sử mua của hộ"
-  // không hiện phiếu của hộ khác. Bỏ được khi BE thêm filter (xem PROGRESS).
-  if (partyId) {
-    const rows = data.data.filter((p) => p.kind === 'ban' && p.partyId === partyId);
-    return { data: rows, meta: { ...data.meta, total: rows.length } };
-  }
-  return data;
+  let rows = data.rows ?? [];
+  // BACKEND CHƯA LỌC gì cả — `svc.listPhieu*()` không nhận tham số, `core/list.js`
+  // chỉ cắt offset/limit. Lọc lại ở client để màn "lịch sử mua của hộ" không hiện
+  // phiếu của hộ khác. Bỏ được khi BE thêm filter (xem PROGRESS).
+  if (partyId) rows = rows.filter((p) => p.kind === 'ban' && p.partyId === partyId);
+  return { data: rows, meta: { total: data.total ?? rows.length, page, pageSize } };
+}
+
+/**
+ * Dựng `PhieuFull` từ 1 phiếu: enrich snapshot dòng hàng thành `PhieuDongHang`.
+ *
+ * Ưu tiên snapshot đã lưu trên phiếu; chỉ fallback sang SKU sống khi phiếu cũ
+ * chưa có snapshot (backwards-compat) — để phiếu đã ghi không đổi khi admin sửa
+ * SKU về sau. Dùng CHUNG cho mock và real: backend trả `dongHang` là DÒNG SỔ
+ * (moves), không phải dòng nhập liệu đã quy đổi mà UI cần.
+ */
+function toPhieuFull(phieu: PhieuHeader): PhieuFull {
+  if (phieu.kind === 'kiem_ke') return { phieu, dongHang: [] };
+  const dongHang = phieu.dongHang.map((d) => {
+    const sku = MOCK_VATTU.find((v) => v.id === d.vatTuId);
+    const heSo = d.heSoQuyDoiSnapshot ?? sku?.heSoQuyDoi;
+    return {
+      vatTuId: d.vatTuId,
+      tenSku: d.tenSkuSnapshot ?? sku?.ten,
+      donViCoBan: d.donViCoBanSnapshot ?? sku?.donViCoBan ?? '',
+      donViLon: d.donViLonSnapshot ?? sku?.donViLon,
+      heSoQuyDoi: heSo,
+      soLuong: d.soLuong,
+      donVi: d.donVi,
+      soLuongCoBan: convertToBase(d.soLuong, d.donVi, { heSoQuyDoi: heSo }),
+      lo: d.lo,
+      hanDung: d.hanDung,
+      serial: d.serial,
+      donGia: d.donGia,
+    };
+  });
+  return { phieu, dongHang };
+}
+
+/**
+ * Bóc response phiếu của backend.
+ *
+ * Backend KHÔNG bọc `{data}` — route trả thẳng `{phieu, moves}` (create/xác
+ * nhận/huỷ) hoặc `{phieu}` (patch kế hoạch); `GET /phieu/:id` trả
+ * `{phieu, dongHang}` nhưng `dongHang` ở đó là DÒNG SỔ, không dùng cho UI.
+ * Nên mọi nơi đều dựng lại `PhieuFull` từ `phieu` (đã mang snapshot dòng hàng).
+ */
+function boc(res: { phieu: PhieuHeader }): PhieuFull {
+  return toPhieuFull(res.phieu);
 }
 
 export async function getReceipt(id: string): Promise<PhieuFull> {
   if (MOCK_API) {
     const phieu = MOCK_PHIEU_STORE.find((p) => p.id === id);
     if (!phieu) throw new MockApiError('Không tìm thấy phiếu', 'khong_tim_thay', 404);
-    const dongHang =
-      phieu.kind === 'kiem_ke'
-        ? []
-        : phieu.dongHang.map((d) => {
-            // Ưu tiên snapshot đã lưu; chỉ fallback sang live SKU khi phiếu cũ chưa có
-            // snapshot (backwards-compat). Đảm bảo phiếu đã ghi không bị đổi khi
-            // admin edit SKU về sau.
-            const sku = MOCK_VATTU.find((v) => v.id === d.vatTuId);
-            const heSo = d.heSoQuyDoiSnapshot ?? sku?.heSoQuyDoi;
-            const base = convertToBase(d.soLuong, d.donVi, { heSoQuyDoi: heSo });
-            return {
-              vatTuId: d.vatTuId,
-              tenSku: d.tenSkuSnapshot ?? sku?.ten,
-              donViCoBan: d.donViCoBanSnapshot ?? sku?.donViCoBan ?? '',
-              donViLon: d.donViLonSnapshot ?? sku?.donViLon,
-              heSoQuyDoi: heSo,
-              soLuong: d.soLuong,
-              donVi: d.donVi,
-              soLuongCoBan: base,
-              lo: d.lo,
-              hanDung: d.hanDung,
-              serial: d.serial,
-              donGia: d.donGia,
-            };
-          });
-    return delay({ phieu, dongHang });
+    return delay(toPhieuFull(phieu));
   }
-  const { data } = await client.get<{ data: PhieuFull }>(`/kho/phieu/${id}`);
-  return data.data;
+  const { data } = await client.get<{ phieu: PhieuHeader }>(`/kho/phieu/${id}`);
+  return boc(data);
 }
 
 /** Enrich body dòng hàng với snapshot meta trước khi persist vào phiếu. */
@@ -295,8 +320,8 @@ async function mockCreatePhieuNhap(body: CreateReceiptBody): Promise<PhieuFull> 
 
 export async function createPhieuNhap(body: CreateReceiptBody): Promise<PhieuFull> {
   if (MOCK_API) return mockCreatePhieuNhap(body);
-  const { data } = await client.post<{ data: PhieuFull }>('/kho/phieu-nhap', body);
-  return data.data;
+  const { data } = await client.post<{ phieu: PhieuHeader }>('/kho/phieu-nhap', body);
+  return boc(data);
 }
 
 /** Nhập kho LƯU TẠM — chưa vào sổ. */
@@ -338,8 +363,8 @@ export async function createPhieuNhapKeHoach(body: CreateReceiptBody): Promise<P
     MOCK_PHIEU_STORE.unshift(phieu);
     return getReceipt(id);
   }
-  const { data } = await client.post<{ data: PhieuFull }>('/kho/phieu-nhap/ke-hoach', body);
-  return data.data;
+  const { data } = await client.post<{ phieu: PhieuHeader }>('/kho/phieu-nhap/ke-hoach', body);
+  return boc(data);
 }
 
 function mustPhieuNhapKeHoach(id: string): PhieuNhap {
@@ -377,8 +402,8 @@ export async function capNhatKeHoach(
     phieu.tongTien = Math.max(0, totals.tongTien - (phieu.giamGia ?? 0));
     return getReceipt(id);
   }
-  const { data } = await client.patch<{ data: PhieuFull }>(`/kho/phieu-nhap/${id}/ke-hoach`, patch);
-  return data.data;
+  const { data } = await client.patch<{ phieu: PhieuHeader }>(`/kho/phieu-nhap/${id}/ke-hoach`, patch);
+  return boc(data);
 }
 
 /** Xác nhận nhận hàng: KẾ HOẠCH → GHI SỔ, sinh moves +in, cập nhật dongHang = thực nhận. */
@@ -436,10 +461,10 @@ export async function xacNhanNhan(
     phieu.tongTien = Math.max(0, totals.tongTien - (phieu.giamGia ?? 0));
     return getReceipt(id);
   }
-  const { data } = await client.post<{ data: PhieuFull }>(`/kho/phieu-nhap/${id}/xac-nhan`, {
+  const { data } = await client.post<{ phieu: PhieuHeader }>(`/kho/phieu-nhap/${id}/xac-nhan`, {
     dongHang: dongHangThucTe,
   });
-  return data.data;
+  return boc(data);
 }
 
 /** Huỷ phiếu nhập TẠM — chỉ đổi cờ, không sinh moves. */
@@ -454,10 +479,10 @@ export async function huyKeHoach(id: string, lyDo: string): Promise<PhieuFull> {
     phieu.huyLuc = nowIso();
     return getReceipt(id);
   }
-  const { data } = await client.post<{ data: PhieuFull }>(`/kho/phieu-nhap/${id}/huy-ke-hoach`, {
+  const { data } = await client.post<{ phieu: PhieuHeader }>(`/kho/phieu-nhap/${id}/huy-ke-hoach`, {
     lyDo,
   });
-  return data.data;
+  return boc(data);
 }
 
 // ============ BÁN HÀNG ============
@@ -540,8 +565,8 @@ export async function createPhieuBan(body: CreateReceiptBody): Promise<PhieuFull
     }
     return getReceipt(id);
   }
-  const { data } = await client.post<{ data: PhieuFull }>('/kho/phieu-ban', body);
-  return data.data;
+  const { data } = await client.post<{ phieu: PhieuHeader }>('/kho/phieu-ban', body);
+  return boc(data);
 }
 
 /** Alias legacy: createReceipt(kind, body) — giữ cho code cũ. */
@@ -588,8 +613,8 @@ export async function huyPhieu(id: string, lyDo: string): Promise<PhieuFull> {
     phieu.huyLuc = now;
     return getReceipt(id);
   }
-  const { data } = await client.post<{ data: PhieuFull }>(`/kho/phieu/${id}/huy`, { lyDo });
-  return data.data;
+  const { data } = await client.post<{ phieu: PhieuHeader }>(`/kho/phieu/${id}/huy`, { lyDo });
+  return boc(data);
 }
 
 /** Alias legacy — routes theo status: ke_hoach → huyKeHoach/huyKiemKeKeHoach; else → huyPhieu. */
@@ -621,10 +646,10 @@ export async function listPhieuKiem(query: {
       }).sort((a, b) => b.taoLuc.localeCompare(a.taoLuc)),
     );
   }
-  const { data } = await client.get<{ data: PhieuKiemKe[] }>('/kho/phieu-kiem', {
+  const { data } = await client.get<BeList<PhieuKiemKe>>('/kho/phieu-kiem', {
     params: query,
   });
-  return data.data;
+  return data.rows ?? [];
 }
 
 export async function createKiemKe(body: CreateKiemKeBody): Promise<PhieuFull> {
@@ -669,8 +694,8 @@ export async function createKiemKe(body: CreateKiemKeBody): Promise<PhieuFull> {
     MOCK_PHIEU_STORE.unshift(phieu);
     return getReceipt(id);
   }
-  const { data } = await client.post<{ data: PhieuFull }>('/kho/phieu-kiem', body);
-  return data.data;
+  const { data } = await client.post<{ phieu: PhieuHeader }>('/kho/phieu-kiem', body);
+  return boc(data);
 }
 
 function mustPhieuKiemKeHoach(id: string): PhieuKiemKe {
@@ -702,8 +727,8 @@ export async function capNhatKiemKe(
     if (patch.ghiChu !== undefined) phieu.ghiChu = patch.ghiChu || undefined;
     return getReceipt(id);
   }
-  const { data } = await client.patch<{ data: PhieuFull }>(`/kho/phieu-kiem/${id}`, patch);
-  return data.data;
+  const { data } = await client.patch<{ phieu: PhieuHeader }>(`/kho/phieu-kiem/${id}`, patch);
+  return boc(data);
 }
 
 /** Cân bằng: đọc tồn sổ TẠI THỜI ĐIỂM CHỐT, sinh moves ±|lech| cho lệch ≠ 0. */
@@ -736,8 +761,8 @@ export async function canBangKiemKe(id: string): Promise<PhieuFull> {
     phieu.trangThai = 'ghi';
     return getReceipt(id);
   }
-  const { data } = await client.post<{ data: PhieuFull }>(`/kho/phieu-kiem/${id}/can-bang`, {});
-  return data.data;
+  const { data } = await client.post<{ phieu: PhieuHeader }>(`/kho/phieu-kiem/${id}/can-bang`, {});
+  return boc(data);
 }
 
 export async function huyKiemKeKeHoach(id: string, lyDo: string): Promise<PhieuFull> {
@@ -751,8 +776,8 @@ export async function huyKiemKeKeHoach(id: string, lyDo: string): Promise<PhieuF
     phieu.huyLuc = nowIso();
     return getReceipt(id);
   }
-  const { data } = await client.post<{ data: PhieuFull }>(`/kho/phieu-kiem/${id}/huy-ke-hoach`, {
+  const { data } = await client.post<{ phieu: PhieuHeader }>(`/kho/phieu-kiem/${id}/huy-ke-hoach`, {
     lyDo,
   });
-  return data.data;
+  return boc(data);
 }
