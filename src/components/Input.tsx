@@ -38,6 +38,15 @@ export const Input = forwardRef<TextInput, Props>(function Input(
         <TextInput
           ref={ref}
           className="flex-1 text-body text-ink"
+          // Ép padding=0 + tắt padding font Android — nếu không, TextInput mặc định
+          // đắp thêm ~6-10px trên/dưới → trong khung `h-input=44` với `lineHeight=24`
+          // thì text bị viền cắt trên/dưới (đặc biệt Android). Multiline dùng py-2 ở
+          // wrapper nên vẫn giữ khoảng thở, không đè.
+          style={
+            isMultiline
+              ? { padding: 0, includeFontPadding: false }
+              : { paddingVertical: 0, includeFontPadding: false }
+          }
           placeholderTextColor="#9ca3af"
           autoCorrect={false}
           multiline={isMultiline}
