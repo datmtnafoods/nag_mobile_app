@@ -99,8 +99,9 @@ export async function createPlot(body: CreateThuaDatBody): Promise<ThuaDat> {
       zoneId: null,
       partyId: body.partyId ?? null,
       cropName: body.cropName?.trim() || null,
-      // Cây xen — backend chưa có cột, mock giữ riêng (giống `ngayGoc`).
-      cropXen: body.cropXen?.trim() || undefined,
+      // Cây xen — danh sách. List rỗng = không xen. Backend `crop_xen` hiện là
+      // VARCHAR, chờ đổi sang TEXT[] (xem `ThuaDat.cropXen`).
+      cropXen: body.cropXen && body.cropXen.length ? [...body.cropXen] : undefined,
       boundary: body.boundary,
       areaHa: areaHa(body.boundary),
       // Backend ép 'pending' bất kể client gửi gì — người vẽ không tự duyệt.
@@ -121,9 +122,9 @@ export async function createPlot(body: CreateThuaDatBody): Promise<ThuaDat> {
     cropName: body.cropName,
     note: body.note,
   };
-  // Cây xen: chỉ đính khi user bật toggle (backend cropXen NULLABLE, migration
-  // 2026-08-19_growing_plot_crop_xen.sql).
-  if (body.cropXen?.trim()) payload.cropXen = body.cropXen.trim();
+  // Cây xen: gửi mảng khi có ≥1 cây. Backend hiện là VARCHAR — gửi array sẽ 400
+  // tới khi migration `crop_xen: VARCHAR → TEXT[]` hoàn tất bên `nag_erp`.
+  if (body.cropXen?.length) payload.cropXen = body.cropXen;
   // Backend thật BẮT BUỘC partyId (400 nếu thiếu) — chỉ đính khi có. Thửa không
   // hộ là hành vi mock; nối thật thì phải nới `service.createPlot`.
   if (body.partyId) payload.partyId = body.partyId;
@@ -176,7 +177,7 @@ export async function updatePlot(
       thua.status = 'pending';
     }
     if (patch.cropName !== undefined) thua.cropName = patch.cropName?.trim() || null;
-    if (patch.cropXen !== undefined) thua.cropXen = patch.cropXen?.trim() || undefined;
+    if (patch.cropXen !== undefined) thua.cropXen = patch.cropXen.length ? [...patch.cropXen] : undefined;
     if (patch.note !== undefined) thua.note = patch.note?.trim() || null;
     if (patch.partyId !== undefined) thua.partyId = patch.partyId || null;
     // Backend chưa có cột `planted_at` — mock giữ riêng (giống createPlot).

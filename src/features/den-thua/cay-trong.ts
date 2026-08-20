@@ -37,3 +37,23 @@ export const CAY_XEN_GOI_Y: string[] = [
   'Khoai lang',
   'Rau màu',
 ];
+
+/** Chuẩn hoá tên cây để so trùng — trim + lowercase. */
+export const chuanHoaCay = (s: string) => s.trim().toLowerCase();
+
+/**
+ * Thêm 1 tên cây vào danh sách cây xen: trim, dedupe theo `chuanHoaCay`, chặn thêm
+ * nếu trùng cây chính (trả list cũ khi trùng/rỗng). Dùng chung cho form tạo/sửa.
+ */
+export function themCayXen(
+  list: string[],
+  ten: string,
+  cayChinh?: string,
+): string[] {
+  const t = ten.trim();
+  if (!t) return list;
+  const key = chuanHoaCay(t);
+  if (cayChinh && chuanHoaCay(cayChinh) === key) return list;
+  if (list.some((x) => chuanHoaCay(x) === key)) return list;
+  return [...list, t];
+}

@@ -5,7 +5,6 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Switch,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,7 +21,7 @@ import { areaHa, centroid, tuCat } from '../../src/features/den-thua/geo';
 import { RanhThuaPreview } from '../../src/features/den-thua/components/RanhThuaPreview';
 import { BanDoRanh } from '../../src/features/den-thua/components/BanDoRanh';
 import { ChonCayTrong } from '../../src/features/den-thua/components/ChonCayTrong';
-import { CAY_XEN_GOI_Y } from '../../src/features/den-thua/cay-trong';
+import { ChonNhieuCayXen } from '../../src/features/den-thua/components/ChonNhieuCayXen';
 import { TimelineCanhTac } from '../../src/features/den-thua/components/TimelineCanhTac';
 import {
   chiSoMocHienTai,
@@ -53,8 +52,7 @@ export default function TaoThua() {
   const xoaRanhDraft = useRanhDraftStore((s) => s.xoa);
 
   const [cayTrong, setCayTrong] = useState('');
-  const [xenCanh, setXenCanh] = useState(false);
-  const [cayXen, setCayXen] = useState('');
+  const [cayXenList, setCayXenList] = useState<string[]>([]);
   // Mốc gốc của timeline canh tác. Mặc định hôm nay, nhưng vườn đã trồng lâu thì
   // KTV phải chỉnh lại — không thì lịch lệch cả năm.
   const [ngayGoc, setNgayGoc] = useState<string | undefined>(
@@ -97,13 +95,8 @@ export default function TaoThua() {
         partyId,
         boundary: ringBanDo,
         cropName: cayTrong.trim() || undefined,
-        // Cây xen chỉ lưu khi bật xen canh, có tên, VÀ khác cây chính (so tên chính xác).
-        cropXen:
-          xenCanh &&
-          cayXen.trim() &&
-          cayXen.trim().toLowerCase() !== cayTrong.trim().toLowerCase()
-            ? cayXen.trim()
-            : undefined,
+        // Cây xen: list rỗng = không xen; ChonNhieuCayXen đã dedupe + loại cây chính.
+        cropXen: cayXenList.length ? cayXenList : undefined,
         ngayGoc: ngayGoc ? new Date(ngayGoc).toISOString() : undefined,
         note: ghiChu.trim() || undefined,
       });
@@ -148,12 +141,6 @@ export default function TaoThua() {
   const ranhXoan = ringBanDo.length >= 4 && tuCat(ringBanDo);
   const buoc1Xong = ringBanDo.length >= 3 && !ranhXoan;
   const buoc2Xong = hoHopLe(hoKq);
-
-  // Cây xen trùng cây chính = vô nghĩa → cảnh báo (và không lưu ở mutation).
-  const xenTrungCayChinh =
-    xenCanh &&
-    Boolean(cayXen.trim()) &&
-    cayXen.trim().toLowerCase() === cayTrong.trim().toLowerCase();
 
   // Xem trước lịch canh tác từ cây chính + ngày kích hoạt (cùng logic màn chi tiết).
   const lichPreview = useMemo(() => nhanDangCayTrong(cayTrong), [cayTrong]);
@@ -270,40 +257,17 @@ export default function TaoThua() {
                   label="Cây trồng chính"
                   giaTri={cayTrong}
                   onChange={setCayTrong}
-                  loaiTru={xenCanh && cayXen.trim() ? [cayXen] : undefined}
+                  loaiTru={cayXenList.length ? cayXenList : undefined}
                 />
 
-                <View className="flex-row items-center justify-between py-1">
-                  <View className="flex-1 pr-3">
-                    <Text className="text-caption text-ink font-semibold">Trồng xen canh</Text>
-                    <Text className="text-small text-ink-muted">
-                      Có cây phụ trồng xen trên cùng thửa.
-                    </Text>
-                  </View>
-                  <Switch
-                    value={xenCanh}
-                    onValueChange={setXenCanh}
-                    trackColor={{ true: '#dd1c2e', false: '#d1d5db' }}
+                <View className="mt-3">
+                  <ChonNhieuCayXen
+                    label="Cây xen (có thể chọn nhiều)"
+                    giaTri={cayXenList}
+                    onChange={setCayXenList}
+                    loaiTru={cayTrong.trim() || undefined}
                   />
                 </View>
-
-                {xenCanh ? (
-                  <View className="mt-3">
-                    <ChonCayTrong
-                      label="Cây xen (khác cây chính)"
-                      giaTri={cayXen}
-                      onChange={setCayXen}
-                      placeholder="Chọn hoặc gõ cây trồng xen…"
-                      goiY={CAY_XEN_GOI_Y}
-                      loaiTru={cayTrong.trim() ? [cayTrong] : undefined}
-                    />
-                    {xenTrungCayChinh ? (
-                      <Text className="text-small text-red-600 -mt-2">
-                        Cây xen phải khác cây trồng chính.
-                      </Text>
-                    ) : null}
-                  </View>
-                ) : null}
               </View>
 
               {/* Ngày kích hoạt + xem trước lịch canh tác */}

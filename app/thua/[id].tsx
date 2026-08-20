@@ -209,7 +209,7 @@ export default function ChiTietThua() {
                 <Ionicons name="leaf-outline" size={14} color="#166534" />
                 <Text className="text-caption text-ink ml-1">
                   {thua.cropName}
-                  {thua.cropXen ? ` · xen ${thua.cropXen}` : ''}
+                  {thua.cropXen?.length ? ` · xen ${thua.cropXen.join(', ')}` : ''}
                 </Text>
               </View>
             ) : null}

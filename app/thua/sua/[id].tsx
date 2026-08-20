@@ -5,7 +5,6 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Switch,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -19,7 +18,7 @@ import { Input } from '../../../src/components/Input';
 import { DateField } from '../../../src/components/DateField';
 import { ErrorState } from '../../../src/components/ErrorState';
 import { ChonCayTrong } from '../../../src/features/den-thua/components/ChonCayTrong';
-import { CAY_XEN_GOI_Y } from '../../../src/features/den-thua/cay-trong';
+import { ChonNhieuCayXen } from '../../../src/features/den-thua/components/ChonNhieuCayXen';
 
 /**
  * Sửa thông tin thửa: cây trồng chính · cây xen · ngày kích hoạt · ghi chú.
@@ -38,8 +37,7 @@ export default function SuaThongTinThua() {
   });
 
   const [cayTrong, setCayTrong] = useState('');
-  const [xenCanh, setXenCanh] = useState(false);
-  const [cayXen, setCayXen] = useState('');
+  const [cayXenList, setCayXenList] = useState<string[]>([]);
   const [ngayGoc, setNgayGoc] = useState<string | undefined>(undefined);
   const [ghiChu, setGhiChu] = useState('');
   const [daNap, setDaNap] = useState(false);
@@ -48,25 +46,18 @@ export default function SuaThongTinThua() {
   useEffect(() => {
     if (daNap || !q.data) return;
     setCayTrong(q.data.cropName ?? '');
-    const xen = q.data.cropXen ?? '';
-    setXenCanh(Boolean(xen));
-    setCayXen(xen);
+    setCayXenList(q.data.cropXen ?? []);
     setNgayGoc(q.data.ngayGoc ? q.data.ngayGoc.slice(0, 10) : undefined);
     setGhiChu(q.data.note ?? '');
     setDaNap(true);
   }, [q.data, daNap]);
 
-  const xenTrungCayChinh =
-    xenCanh &&
-    Boolean(cayXen.trim()) &&
-    cayXen.trim().toLowerCase() === cayTrong.trim().toLowerCase();
-
   const luu = useMutation({
     mutationFn: () =>
       updatePlot(plotId, {
         cropName: cayTrong.trim() || undefined,
-        // '' để CLEAR khi tắt xen canh; tên khi bật + khác cây chính.
-        cropXen: xenCanh && cayXen.trim() && !xenTrungCayChinh ? cayXen.trim() : '',
+        // Mảng rỗng = clear ở backend. ChonNhieuCayXen đã dedupe + chặn trùng cây chính.
+        cropXen: cayXenList,
         note: ghiChu.trim() || undefined,
         ngayGoc: ngayGoc ? new Date(ngayGoc).toISOString() : undefined,
       }),
@@ -116,40 +107,17 @@ export default function SuaThongTinThua() {
               label="Cây trồng chính"
               giaTri={cayTrong}
               onChange={setCayTrong}
-              loaiTru={xenCanh && cayXen.trim() ? [cayXen] : undefined}
+              loaiTru={cayXenList.length ? cayXenList : undefined}
             />
 
-            <View className="flex-row items-center justify-between py-1">
-              <View className="flex-1 pr-3">
-                <Text className="text-caption text-ink font-semibold">Trồng xen canh</Text>
-                <Text className="text-small text-ink-muted">
-                  Có cây phụ trồng xen trên cùng thửa.
-                </Text>
-              </View>
-              <Switch
-                value={xenCanh}
-                onValueChange={setXenCanh}
-                trackColor={{ true: '#dd1c2e', false: '#d1d5db' }}
+            <View className="mt-3">
+              <ChonNhieuCayXen
+                label="Cây xen (có thể chọn nhiều)"
+                giaTri={cayXenList}
+                onChange={setCayXenList}
+                loaiTru={cayTrong.trim() || undefined}
               />
             </View>
-
-            {xenCanh ? (
-              <View className="mt-3">
-                <ChonCayTrong
-                  label="Cây xen (khác cây chính)"
-                  giaTri={cayXen}
-                  onChange={setCayXen}
-                  placeholder="Chọn hoặc gõ cây trồng xen…"
-                  goiY={CAY_XEN_GOI_Y}
-                  loaiTru={cayTrong.trim() ? [cayTrong] : undefined}
-                />
-                {xenTrungCayChinh ? (
-                  <Text className="text-small text-red-600 -mt-2">
-                    Cây xen phải khác cây trồng chính.
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
           </View>
 
           {/* Ngày kích hoạt */}
@@ -186,7 +154,7 @@ export default function SuaThongTinThua() {
             <Button
               label="Lưu"
               loading={luu.isPending}
-              disabled={xenTrungCayChinh || luu.isPending}
+              disabled={luu.isPending}
               onPress={() => luu.mutate()}
             />
           </View>

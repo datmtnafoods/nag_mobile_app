@@ -51,7 +51,10 @@ export function ThuaDatCard({ thua, khoangCachM, onPress }: Props) {
         {thua.cropName ? (
           <View className="flex-row items-center mr-3">
             <Ionicons name="leaf-outline" size={14} color="#166534" />
-            <Text className="text-caption text-ink ml-1">{thua.cropName}</Text>
+            <Text className="text-caption text-ink ml-1">
+              {thua.cropName}
+              {thua.cropXen?.length ? ` · xen ${thua.cropXen.join(', ')}` : ''}
+            </Text>
           </View>
         ) : null}
         <View className="flex-row items-center mr-3">

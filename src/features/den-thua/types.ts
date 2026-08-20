@@ -20,10 +20,11 @@ export interface ThuaDat {
   cropName: string | null;
   /**
    * Cây trồng xen canh (cây phụ). Cây chính là `cropName` — cây quyết định lịch
-   * canh tác; cây xen chỉ ghi kèm để biết. Backend `growing_plot` KHÔNG có cột
-   * này (mock giữ riêng, giống `ngayGoc`); đợt nối backend cần thêm cột.
+   * canh tác; cây xen chỉ ghi kèm để biết. Backend `growing_plot.crop_xen` HIỆN
+   * là VARCHAR (migration 2026-08-19). ĐANG CHỜ đổi sang `TEXT[]` để lưu được
+   * nhiều cây; trước khi BE đổi, real mode với thửa có cropXen có thể 400.
    */
-  cropXen?: string;
+  cropXen?: string[];
   boundary: Ring;
   areaHa: number;
   status: PlotStatus;
@@ -59,8 +60,8 @@ export interface CreateThuaDatBody {
   partyId?: string;
   boundary: Ring;
   cropName?: string;
-  /** Cây trồng xen canh — mock-only, backend chưa có cột (xem `ThuaDat.cropXen`). */
-  cropXen?: string;
+  /** Cây trồng xen canh — danh sách. Xem `ThuaDat.cropXen` về trạng thái BE. */
+  cropXen?: string[];
   note?: string;
   /** Mock-only — backend chưa có cột `planted_at`, gửi lên sẽ bị bỏ im lặng. */
   ngayGoc?: string;

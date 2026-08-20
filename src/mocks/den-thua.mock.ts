@@ -26,6 +26,7 @@ function seedThua(
   status: ThuaDat['status'],
   taoLuc: string,
   ngayGoc?: string,
+  cropXen?: string[],
 ): ThuaDat {
   const [lat, lng] = lech(DEMO_LAT, DEMO_LNG, dxM, dyM);
   const boundary = oVuongTuDiem(lat, lng, dienTichM2);
@@ -34,6 +35,7 @@ function seedThua(
     zoneId: null,
     partyId,
     cropName,
+    cropXen,
     boundary,
     areaHa: areaHa(boundary),
     status,
@@ -57,8 +59,11 @@ export const MOCK_THUA_DAT: ThuaDat[] = [
     '2026-08-10T02:00:00Z', '2025-06-20T00:00:00Z',
   ),
   // Cà phê: CHƯA có lịch canh tác -> thửa này không hiện timeline, chỉ có nhật ký.
-  // Cố ý giữ để demo được nhánh "cây chưa có lịch".
-  seedThua('GP-260812-02', 'p_002', -180, -140, 5_000, 'Cà phê', 'approved', '2026-08-12T03:00:00Z'),
+  // Cố ý giữ để demo được nhánh "cây chưa có lịch". Có 2 cây xen để demo multi cropXen.
+  seedThua(
+    'GP-260812-02', 'p_002', -180, -140, 5_000, 'Cà phê', 'approved',
+    '2026-08-12T03:00:00Z', undefined, ['Ngô', 'Đậu tương'],
+  ),
   seedThua('GP-260815-03', 'p_003', 60, -230, 1_500, 'Bơ 034', 'pending', '2026-08-15T06:00:00Z'),
 ];
 
