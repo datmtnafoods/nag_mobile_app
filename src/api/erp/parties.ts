@@ -202,3 +202,41 @@ export async function createParty(input: CreatePartyInput): Promise<Party> {
   });
   return data;
 }
+
+export type UpdatePartyInput = {
+  name?: string;
+  phone?: string;
+  address?: string;
+  commune?: string;
+  province?: string;
+  note?: string;
+  cccd?: string;
+  dob?: string;
+  gender?: 'nam' | 'nu';
+};
+
+/**
+ * Sửa hồ sơ nông hộ đã có. Chỉ truyền field cần sửa (partial patch).
+ * SĐT là APPEND — thêm số mới, không thay số cũ (mobile hiện chưa cần "xoá số").
+ */
+export async function updateParty(id: string, input: UpdatePartyInput): Promise<Party> {
+  if (MOCK_API) {
+    await new Promise((r) => setTimeout(r, MOCK_DELAY));
+    const idx = MOCK_PARTIES.findIndex((p) => p.id === id);
+    if (idx < 0) throw new MockApiError('Không tìm thấy nông hộ.', 'khong_thay', 404);
+    const p = MOCK_PARTIES[idx]!;
+    if (input.name !== undefined) p.name = input.name.trim();
+    if (input.address !== undefined) p.address = input.address.trim() || undefined;
+    if (input.commune !== undefined) p.commune = input.commune.trim() || undefined;
+    if (input.cccd !== undefined) p.cccd = input.cccd.trim() || undefined;
+    if (input.dob !== undefined) p.dob = input.dob || undefined;
+    if (input.gender !== undefined) p.gender = input.gender;
+    if (input.phone) {
+      const ph = input.phone.trim();
+      if (ph && !p.phones.includes(ph)) p.phones.push(ph);
+    }
+    return { ...p };
+  }
+  const { data } = await client.patch<Party>(`/parties/${id}`, input);
+  return data;
+}

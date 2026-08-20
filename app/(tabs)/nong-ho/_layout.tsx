@@ -14,6 +14,7 @@ export default function NongHoLayout() {
       <Stack.Screen name="index" options={{ title: 'Quản lý nông hộ' }} />
       <Stack.Screen name="tao" options={{ title: 'Tạo nông hộ' }} />
       <Stack.Screen name="[id]" options={{ title: 'Chi tiết nông hộ' }} />
+      <Stack.Screen name="sua/[id]" options={{ title: 'Sửa nông hộ' }} />
     </Stack>
   );
 }

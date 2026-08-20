@@ -14,7 +14,8 @@ import { apiErrorMessage } from '../../../src/api/client';
 
 export default function TaoNongHo() {
   const qc = useQueryClient();
-  // Mặc định mở nhánh "Hộ mới"; vẫn cho chọn hộ đã có (giaiQuyetHo xử lý cả hai).
+  // ÉP 'moi' — màn này là "Tạo nông hộ", tab "Hộ đã có" vô nghĩa (chọn xong bấm
+  // "Lưu" không update gì). Tra hộ đã có thì dùng search ở tab liệt kê.
   const [kq, setKq] = useState<KetQuaChonHo>({ loai: 'moi', ten: '', sdt: '', diaChi: '' });
 
   const luu = useMutation({
@@ -38,7 +39,7 @@ export default function TaoNongHo() {
           contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
           keyboardShouldPersistTaps="handled"
         >
-          <ChonNongHo giaTri={kq} onChange={setKq} />
+          <ChonNongHo giaTri={kq} onChange={setKq} chiTaoMoi />
         </ScrollView>
         <View className="px-4 pb-4 pt-2 border-t border-border bg-bg">
           <Button

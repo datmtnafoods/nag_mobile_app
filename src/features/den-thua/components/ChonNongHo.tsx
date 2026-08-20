@@ -77,9 +77,12 @@ type Props = {
   choBoQua?: boolean;
   /** Placeholder địa chỉ (thường là địa chỉ geocode của thửa). */
   diaChiMacDinh?: string;
+  /** Chỉ cho phép tạo hộ MỚI (ẩn tabs, ép loai='moi'). Dùng ở màn "Tạo nông hộ"
+   *  nơi tab "Hộ đã có" vô nghĩa — chọn hộ có sẵn thì bấm "Lưu" không update gì. */
+  chiTaoMoi?: boolean;
 };
 
-export function ChonNongHo({ giaTri, onChange, choBoQua = false, diaChiMacDinh }: Props) {
+export function ChonNongHo({ giaTri, onChange, choBoQua = false, diaChiMacDinh, chiTaoMoi = false }: Props) {
   const [tim, setTim] = useState('');
 
   // ─ Nhận dữ liệu CCCD bàn giao ngược từ màn quét (`app/thua/quet-cccd.tsx`).
@@ -128,7 +131,8 @@ export function ChonNongHo({ giaTri, onChange, choBoQua = false, diaChiMacDinh }
 
   return (
     <View>
-      {/* Toggle nhánh */}
+      {/* Toggle nhánh — ẩn khi chiTaoMoi (màn Tạo nông hộ). */}
+      {!chiTaoMoi ? (
       <View className="flex-row mb-3">
         {tabs.map((t, i) => {
           const active = giaTri.loai === t.loai;
@@ -147,6 +151,7 @@ export function ChonNongHo({ giaTri, onChange, choBoQua = false, diaChiMacDinh }
           );
         })}
       </View>
+      ) : null}
 
       {giaTri.loai === 'bo_qua' ? (
         <View className="rounded-card bg-amber-50 border border-amber-200 p-3 flex-row">

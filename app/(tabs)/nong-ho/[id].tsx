@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -83,6 +83,16 @@ export default function NongHoDetail() {
               <Text className="text-h2 text-ink">{ho.name}</Text>
               <Text className="text-caption text-ink-muted font-mono mt-0.5">{ho.id}</Text>
             </View>
+            {/* Nút Sửa nhanh — bổ sung SĐT/CCCD/địa chỉ, sửa lỗi chính tả tên. */}
+            <Pressable
+              onPress={() => router.push(`/nong-ho/sua/${ho.id}` as never)}
+              accessibilityRole="button"
+              accessibilityLabel="Sửa nông hộ"
+              hitSlop={8}
+              className="p-2 rounded-input active:bg-bg-soft"
+            >
+              <Ionicons name="create-outline" size={22} color="#dd1c2e" />
+            </Pressable>
           </View>
 
           <View className="mt-2">
