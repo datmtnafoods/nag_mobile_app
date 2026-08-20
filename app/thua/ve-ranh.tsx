@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDeviceLocation } from '../../src/hooks/useDeviceLocation';
 import { useRanhDraftStore } from '../../src/stores/ranh-draft';
 import {
@@ -11,6 +12,8 @@ import {
   type BanDoRanhHandle,
 } from '../../src/features/den-thua/components/BanDoRanh';
 import { areaHa, chuViM, tuCat, type Ring } from '../../src/features/den-thua/geo';
+import { updatePlot } from '../../src/api/erp/growing-areas';
+import { apiErrorMessage } from '../../src/api/client';
 import { Button } from '../../src/components/Button';
 
 /** Trên bản đồ KHÔNG chặn cứng sai số — chỉ cảnh báo, vì KTV nhìn thấy đỉnh và kéo được. */
@@ -44,11 +47,15 @@ function Fab({
 }
 
 export default function VeRanh() {
-  const params = useLocalSearchParams<{ lat?: string; lng?: string }>();
+  const params = useLocalSearchParams<{ lat?: string; lng?: string; plotId?: string }>();
   const lat0 = Number(params.lat) || 0;
   const lng0 = Number(params.lng) || 0;
   const initialCenter: [number, number] | null = lat0 && lng0 ? [lng0, lat0] : null;
+  // plotId có = luồng SỬA ranh của thửa đã lưu → PATCH backend + refetch. Không
+  // có = luồng vẽ mới cho wizard tạo thửa → chỉ bàn giao ring qua store, back.
+  const plotId = typeof params.plotId === 'string' ? params.plotId : null;
 
+  const qc = useQueryClient();
   const datRing = useRanhDraftStore((s) => s.datRing);
 
   const banDoRef = useRef<BanDoRanhHandle>(null);
@@ -92,9 +99,26 @@ export default function VeRanh() {
     setCanhBao(null);
   };
 
+  // Luồng SỬA: PATCH backend + refetch chi tiết thửa. onSuccess → back.
+  // Luồng VẼ MỚI: chỉ datRing rồi back (wizard tự lưu qua createPlot sau).
+  const luuRanh = useMutation({
+    mutationFn: (r: Ring) => updatePlot(plotId!, { boundary: r }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['thua', plotId] });
+      qc.invalidateQueries({ queryKey: ['thua-list'] });
+      qc.invalidateQueries({ queryKey: ['thua-by-party'] });
+      router.back();
+    },
+    onError: (err) => Alert.alert('Chưa lưu được', apiErrorMessage(err)),
+  });
+
   const xong = () => {
-    datRing(ring);
-    router.back();
+    if (plotId) {
+      luuRanh.mutate(ring);
+    } else {
+      datRing(ring);
+      router.back();
+    }
   };
 
   // Callback từ bản đồ khi user chạm gần đỉnh đầu (chấm xanh to). Ring đầu ra
@@ -106,8 +130,12 @@ export default function VeRanh() {
       setCanhBao('Ranh bị xoắn — kéo lại đỉnh cho hết cắt chéo trước khi đóng vòng.');
       return;
     }
-    datRing(ringMoi);
-    router.back();
+    if (plotId) {
+      luuRanh.mutate(ringMoi);
+    } else {
+      datRing(ringMoi);
+      router.back();
+    }
   };
 
   return (
@@ -192,9 +220,18 @@ export default function VeRanh() {
               {/* Xanh chốt khi đủ điều kiện — nổi hẳn trên pill/nền vệ tinh đỏ.
                   Label kèm diện tích để user thấy rõ sẽ lưu bao nhiêu ha. */}
               <Button
-                label={coTheXong ? `Xong · ${areaHa(ring).toLocaleString('vi-VN')} ha` : 'Xong'}
+                label={
+                  plotId
+                    ? coTheXong
+                      ? `Lưu · ${areaHa(ring).toLocaleString('vi-VN')} ha`
+                      : 'Lưu'
+                    : coTheXong
+                    ? `Xong · ${areaHa(ring).toLocaleString('vi-VN')} ha`
+                    : 'Xong'
+                }
                 variant={coTheXong ? 'success' : 'primary'}
-                disabled={!coTheXong}
+                loading={luuRanh.isPending}
+                disabled={!coTheXong || luuRanh.isPending}
                 onPress={xong}
               />
             </View>

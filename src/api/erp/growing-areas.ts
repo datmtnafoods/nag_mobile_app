@@ -150,6 +150,39 @@ export async function ganNongHoChoThua(plotId: string, partyId: string): Promise
   return data;
 }
 
+/**
+ * Cập nhật thửa đã lưu — dùng cho "Sửa ranh" từ chi tiết thửa. Backend `updatePlot`
+ * chấp: boundary (cleanRing + tính lại areaHa/zoneId), partyId, cropName, cropXen,
+ * note. MỌI patch reset thửa về 'pending' (nghiệp vụ: ranh đã duyệt sửa xong coi
+ * như nộp lại).
+ */
+export async function updatePlot(
+  plotId: string,
+  patch: Partial<Pick<CreateThuaDatBody, 'boundary' | 'cropName' | 'cropXen' | 'note' | 'partyId'>>,
+): Promise<ThuaDat> {
+  if (patch.boundary) {
+    const loi = validateRing(patch.boundary);
+    if (loi) throw new MockApiError(loi, 'ranh_khong_hop_le', 400);
+  }
+  if (MOCK_API) {
+    await new Promise((r) => setTimeout(r, MOCK_DELAY));
+    const thua = MOCK_THUA_DAT.find((p) => p.id === plotId);
+    if (!thua) throw new MockApiError('Không tìm thấy thửa.', 'khong_thay', 404);
+    if (patch.boundary) {
+      thua.boundary = patch.boundary;
+      thua.areaHa = areaHa(patch.boundary);
+      thua.status = 'pending';
+    }
+    if (patch.cropName !== undefined) thua.cropName = patch.cropName?.trim() || null;
+    if (patch.cropXen !== undefined) thua.cropXen = patch.cropXen?.trim() || undefined;
+    if (patch.note !== undefined) thua.note = patch.note?.trim() || null;
+    if (patch.partyId !== undefined) thua.partyId = patch.partyId || null;
+    return thua;
+  }
+  const { data } = await client.patch<ThuaDat>(`/growing-areas/plots/${plotId}`, patch);
+  return data;
+}
+
 /** Bán kính coi là "gần đây" khi GPS rơi ngoài mọi ranh thửa. */
 const BAN_KINH_GAN_M = 300;
 

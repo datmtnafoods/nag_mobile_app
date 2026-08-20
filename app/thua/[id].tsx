@@ -15,6 +15,7 @@ import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { getPlot, ganNongHoChoThua } from '../../src/api/erp/growing-areas';
+import { useRanhDraftStore } from '../../src/stores/ranh-draft';
 import { listMocDaXacNhan, xacNhanMoc, huyXacNhanMoc } from '../../src/api/erp/canh-tac';
 import { listNhatKy } from '../../src/api/erp/nhat-ky';
 import { apiErrorMessage } from '../../src/api/client';
@@ -240,7 +241,23 @@ export default function ChiTietThua() {
         {/* Ranh thửa trên ảnh vệ tinh — SVG là fallback khi không tải được bản đồ */}
         {thua.boundary && thua.boundary.length >= 3 ? (
           <View className="rounded-card bg-white border border-border p-4 mb-4">
-            <Text className="text-caption text-ink-muted uppercase mb-2">Ranh thửa</Text>
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-caption text-ink-muted uppercase">Ranh thửa</Text>
+              {/* Nút Sửa ranh — mở lại màn vẽ với ring hiện tại + plotId, save qua PATCH. */}
+              <Pressable
+                onPress={() => {
+                  useRanhDraftStore.getState().datRing(thua.boundary);
+                  router.push(`/thua/ve-ranh?plotId=${thua.id}` as never);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Sửa ranh thửa"
+                hitSlop={8}
+                className="flex-row items-center px-2 py-1 rounded-input active:bg-bg-soft"
+              >
+                <Ionicons name="create-outline" size={16} color="#dd1c2e" />
+                <Text className="text-caption text-primary font-semibold ml-1">Sửa ranh</Text>
+              </Pressable>
+            </View>
             {mapLoi ? (
               <RanhThuaPreview ring={thua.boundary} />
             ) : (
