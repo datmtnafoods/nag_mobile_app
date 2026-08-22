@@ -75,15 +75,22 @@ export function DateField({
         ) : null}
       </View>
 
-      {show ? (
+      {/*
+        Android: picker là dialog native, tự bung — không cần khung.
+        iOS: dùng `spinner` (bánh xe cuộn) chứ KHÔNG dùng `inline`. `inline` là
+        lịch tháng cỡ lớn, cần không gian riêng và nền trong suốt; nhét vào form
+        chật hoặc trong Modal là tràn ra, chữ chồng lên nhau. `spinner` cao cố
+        định nên render ổn định ở mọi container.
+      */}
+      {show && Platform.OS === 'android' ? (
         <DateTimePicker
           value={current}
           mode="date"
-          display={Platform.OS === 'ios' ? 'inline' : 'default'}
+          display="default"
           minimumDate={minimumDate}
           maximumDate={maximumDate}
           onChange={(event, selected) => {
-            if (Platform.OS === 'android') setShow(false);
+            setShow(false);
             if (event.type === 'dismissed') return;
             if (selected) onChange(toIsoDate(selected));
           }}
@@ -91,13 +98,28 @@ export function DateField({
       ) : null}
 
       {show && Platform.OS === 'ios' ? (
-        <Pressable
-          onPress={() => setShow(false)}
-          className="self-end mt-1 px-3 py-2"
-          accessibilityRole="button"
-        >
-          <Text className="text-primary font-semibold">Xong</Text>
-        </Pressable>
+        <View className="mt-2 rounded-input border border-border bg-white overflow-hidden">
+          <DateTimePicker
+            value={current}
+            mode="date"
+            display="spinner"
+            locale="vi-VN"
+            themeVariant="light"
+            minimumDate={minimumDate}
+            maximumDate={maximumDate}
+            onChange={(_event, selected) => {
+              if (selected) onChange(toIsoDate(selected));
+            }}
+            style={{ height: 180 }}
+          />
+          <Pressable
+            onPress={() => setShow(false)}
+            className="border-t border-border py-3 items-center active:bg-bg-soft"
+            accessibilityRole="button"
+          >
+            <Text className="text-primary font-semibold">Xong</Text>
+          </Pressable>
+        </View>
       ) : null}
     </View>
   );

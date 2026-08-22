@@ -236,6 +236,7 @@ export default function NewPhieuNhap() {
           {/* Dòng hàng */}
           <WizardSection
             title="4 · Dòng hàng"
+            bleed
             right={
               <View className="flex-row gap-3">
                 <Pressable
@@ -251,7 +252,11 @@ export default function NewPhieuNhap() {
                   <Text className="text-caption text-primary ml-1 font-semibold">Quét mã</Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => router.push('/vat-tu/sku-picker' as never)}
+                  onPress={() =>
+                    router.push(
+                      `/vat-tu/sku-picker${khoId ? `?khoId=${khoId}` : ''}` as never,
+                    )
+                  }
                   hitSlop={8}
                   className="flex-row items-center"
                 >

@@ -150,7 +150,7 @@ export default function PairCode() {
               <View className="bg-white/90 rounded-card p-3">
                 <Text className="text-body text-ink font-semibold">Gắn mã QR cho SKU</Text>
                 <Text className="text-small text-ink-muted mt-1">
-                  Quét mã lạ → chọn SKU → gắn để lần sau nhận diện. Mã đã gắn sẽ hiện SKU tương ứng.
+                  Quét mã lạ → chọn SKU → gắn để lần sau nhận diện.
                 </Text>
                 {scanned ? (
                   <Text className="text-caption text-primary font-semibold mt-2">

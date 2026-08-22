@@ -20,6 +20,13 @@ function delay<T>(v: T, ms = MOCK_DELAY): Promise<T> {
   return new Promise((r) => setTimeout(() => r(v), ms));
 }
 
+/**
+ * Envelope backend: KHÔNG bọc `{data}` (xem warehouse.ts:65-70, commit 7e14c05).
+ * List → `{rows, total}`; get/create/patch → trả thẳng object.
+ * File này từng đọc `data.data` ở mọi nhánh real → undefined ở real mode.
+ */
+type BeList<T> = { rows: T[]; total: number };
+
 class MockApiError extends Error {
   code: string;
   status: number;
@@ -50,10 +57,10 @@ export async function listVatTu(
       }),
     );
   }
-  const { data } = await client.get<{ data: VatTu[] }>('/vat-tu', {
+  const { data } = await client.get<BeList<VatTu>>('/vat-tu', {
     params: { q, loai: loaiId, includeNgung: includeNgung ? 1 : undefined },
   });
-  return data.data;
+  return data.rows ?? [];
 }
 
 export async function getVatTu(id: string): Promise<VatTu> {
@@ -62,8 +69,8 @@ export async function getVatTu(id: string): Promise<VatTu> {
     if (!item) throw new MockApiError('Không tìm thấy vật tư', 'khong_tim_thay', 404);
     return delay(item);
   }
-  const { data } = await client.get<{ data: VatTu }>(`/vat-tu/${id}`);
-  return data.data;
+  const { data } = await client.get<VatTu>(`/vat-tu/${id}`);
+  return data;
 }
 
 /** Trả về SKU nếu tìm thấy, ném { code: 'ma_not_found' } nếu không. */
@@ -74,8 +81,8 @@ export async function resolveByCode(ma: string): Promise<VatTu> {
     if (!item) throw new MockApiError('Mã này chưa gán cho SKU nào', 'ma_not_found', 404);
     return item;
   }
-  const { data } = await client.get<{ data: VatTu }>('/vat-tu/resolve', { params: { ma } });
-  return data.data;
+  const { data } = await client.get<VatTu>('/vat-tu/resolve', { params: { ma } });
+  return data;
 }
 
 export type CreateSkuInput = {
@@ -134,8 +141,8 @@ export async function createSku(input: CreateSkuInput): Promise<VatTu> {
     MOCK_VATTU.push(sku);
     return sku;
   }
-  const { data } = await client.post<{ data: VatTu }>('/vat-tu', input);
-  return data.data;
+  const { data } = await client.post<VatTu>('/vat-tu', input);
+  return data;
 }
 
 export async function updateSku(id: string, patch: Partial<CreateSkuInput>): Promise<VatTu> {
@@ -174,8 +181,8 @@ export async function updateSku(id: string, patch: Partial<CreateSkuInput>): Pro
     if (patch.trangThai !== undefined) sku.trangThai = patch.trangThai;
     return sku;
   }
-  const { data } = await client.put<{ data: VatTu }>(`/vat-tu/${id}`, patch);
-  return data.data;
+  const { data } = await client.put<VatTu>(`/vat-tu/${id}`, patch);
+  return data;
 }
 
 // ============ MÃ QR / BARCODE ============
@@ -205,8 +212,8 @@ export async function addMa(
     sku.ma = [...sku.ma, { ma, kieu: input.kieu, nguon: input.nguon ?? 'tu_gan' }];
     return sku;
   }
-  const { data } = await client.post<{ data: VatTu }>(`/vat-tu/${id}/ma`, input);
-  return data.data;
+  const { data } = await client.post<VatTu>(`/vat-tu/${id}/ma`, input);
+  return data;
 }
 
 export async function removeMa(id: string, ma: string): Promise<VatTu> {
@@ -221,26 +228,26 @@ export async function removeMa(id: string, ma: string): Promise<VatTu> {
     sku.ma = sku.ma.filter((m) => m.ma !== ma);
     return sku;
   }
-  const { data } = await client.delete<{ data: VatTu }>(
+  const { data } = await client.delete<VatTu>(
     `/vat-tu/${id}/ma/${encodeURIComponent(ma)}`,
   );
-  return data.data;
+  return data;
 }
 
 // ============ LOẠI ============
 
 export async function listLoai(): Promise<VatTuLoai[]> {
   if (MOCK_API) return delay(MOCK_LOAI);
-  const { data } = await client.get<{ data: VatTuLoai[] }>('/vat-tu/loai');
-  return data.data;
+  const { data } = await client.get<BeList<VatTuLoai>>('/vat-tu/loai');
+  return data.rows ?? [];
 }
 
 // ============ NCC ============
 
 export async function listNcc(): Promise<NhaCungCap[]> {
   if (MOCK_API) return delay(MOCK_NCC);
-  const { data } = await client.get<{ data: NhaCungCap[] }>('/vat-tu/ncc');
-  return data.data;
+  const { data } = await client.get<BeList<NhaCungCap>>('/vat-tu/ncc');
+  return data.rows ?? [];
 }
 
 export async function createNcc(
@@ -259,6 +266,6 @@ export async function createNcc(
     MOCK_NCC.push(ncc);
     return ncc;
   }
-  const { data } = await client.post<{ data: NhaCungCap }>('/vat-tu/ncc', input);
-  return data.data;
+  const { data } = await client.post<NhaCungCap>('/vat-tu/ncc', input);
+  return data;
 }

@@ -10,6 +10,8 @@ import { Button } from '../../../src/components/Button';
 import { ErrorState } from '../../../src/components/ErrorState';
 import { apiErrorMessage } from '../../../src/api/client';
 import { useMyScope } from '../../../src/auth/store';
+import { usePartyQueueStore } from '../../../src/stores/party-queue';
+import { flushPartyQueue } from '../../../src/api/erp/party-sync';
 
 type TabKind = 'mine' | 'all';
 
@@ -17,6 +19,8 @@ export default function NongHoList() {
   const [tim, setTim] = useState('');
   const [tab, setTab] = useState<TabKind>('mine');
   const scope = useMyScope();
+  // Hộ khai offline đang chờ đồng bộ (reactive — flush xong tự biến mất).
+  const pending = usePartyQueueStore((s) => s.pending);
 
   const q = useQuery({
     // key theo tab để switch tabs → fetch lại (dữ liệu khác)
@@ -78,8 +82,7 @@ export default function NongHoList() {
           <View className="rounded-card bg-amber-50 border border-amber-200 p-3 mb-3 flex-row">
             <Ionicons name="information-circle-outline" size={18} color="#92400e" />
             <Text className="text-small text-amber-900 ml-2 flex-1">
-              Bạn chưa được gán nông trạm nào. Danh sách này chỉ hiện hộ do chính bạn tạo — liên hệ
-              admin để gán nông trạm phụ trách.
+              Chưa gán nông trạm — chỉ thấy hộ bạn tạo. Liên hệ admin.
             </Text>
           </View>
         ) : tab === 'mine' && tramLabel ? (
@@ -95,6 +98,43 @@ export default function NongHoList() {
           onChangeText={setTim}
           autoCapitalize="none"
         />
+
+        {pending.length > 0 ? (
+          <View className="mb-4">
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-caption text-amber-800 uppercase font-semibold">
+                Chờ đồng bộ ({pending.length})
+              </Text>
+              <Text
+                className="text-caption text-primary font-semibold"
+                onPress={() => void flushPartyQueue()}
+                accessibilityRole="button"
+                accessibilityLabel="Gửi lại các hộ chờ đồng bộ"
+              >
+                Gửi lại
+              </Text>
+            </View>
+            {pending.map((p) => (
+              <View
+                key={p.tempId}
+                className="rounded-card bg-amber-50 border border-amber-200 p-3 mb-2 flex-row items-center"
+              >
+                <View className="h-10 w-10 rounded-full bg-amber-100 items-center justify-center mr-3">
+                  <Ionicons name="cloud-offline-outline" size={18} color="#92400e" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-body text-ink font-semibold">{p.name}</Text>
+                  <Text className="text-caption text-ink-muted" numberOfLines={1}>
+                    {p.phone ?? 'Chưa có SĐT'}
+                  </Text>
+                </View>
+                <View className="rounded-full bg-amber-100 px-2 py-0.5">
+                  <Text className="text-small text-amber-800 font-semibold">Chờ đồng bộ</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <Text className="text-caption text-ink-muted uppercase mb-2">
           Nông hộ{ds.length ? ` (${ds.length})` : ''}

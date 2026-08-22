@@ -5,6 +5,7 @@ import type {
   DongHangNhapLieu,
   Kho,
   KhoMove,
+  LanThu,
   ListReceiptsQuery,
   Paginated,
   PhieuBan,
@@ -13,6 +14,7 @@ import type {
   PhieuKiemKe,
   PhieuNhap,
   ReceiptKind,
+  TaoKhoTamBody,
   TonKhoRow,
 } from '../../features/vat-tu/types';
 import {
@@ -20,6 +22,8 @@ import {
   MOCK_MOVES_STORE,
   MOCK_PHIEU_STORE,
   MOCK_VATTU,
+  nextKhoTamId,
+  nextLanThuId,
   nextMoveId,
   nextPhieuId,
   sumStock,
@@ -73,6 +77,45 @@ export async function listKho(): Promise<Kho[]> {
   if (MOCK_API) return delay(MOCK_KHO);
   const { data } = await client.get<BeList<Kho>>('/kho');
   return data.rows ?? [];
+}
+
+/**
+ * Tạo kho tạm (kho xe) NGAY TRÊN APP — KTV tự tạo, không chờ admin provision.
+ *
+ * Kho tạm = kho xe (W7): `loai:'xe'`, custodian = chính KTV (DB CHECK ép non-null).
+ * BE GAP: backend CHƯA có `POST /kho`. Khi nối thật:
+ *   POST /kho  body { ten, loai:'xe', loaiXe, custodianUserId } → trả Kho TRỰC TIẾP
+ *   (KHÔNG envelope {data}). `loaiXe` (xe máy/tải) cần cột BE tương ứng
+ *   (vehicle_kind). Gate theo quyền BE (vd 'kho:tao') — KHÔNG map role ở client
+ *   (Khuôn 5). Cho tới lúc đó nhánh real trả 404; hàng đợi offline giữ lại thử sau.
+ * Đồng bộ offline: kho tạm khai lúc mất mạng xếp `stores/kho-tam-queue.ts`, drain
+ * bằng `api/erp/kho-sync.ts#flushKhoQueue()` khi có mạng lại.
+ */
+export async function taoKhoTam(body: TaoKhoTamBody): Promise<Kho> {
+  if (MOCK_API) {
+    const ten = body.ten.trim();
+    if (ten.length < 2) {
+      throw new MockApiError('Nhập tên kho tạm (tối thiểu 2 ký tự).', 'thieu_ten', 400);
+    }
+    const kho: Kho = {
+      id: nextKhoTamId(),
+      ten,
+      loai: 'xe',
+      loaiXe: body.loaiXe,
+      custodianUserId: body.custodianUserId,
+      custodianName: body.custodianName,
+      trangThai: 'active',
+    };
+    MOCK_KHO.push(kho);
+    return delay(kho);
+  }
+  const { data } = await client.post<Kho>('/kho', {
+    ten: body.ten.trim(),
+    loai: 'xe',
+    loaiXe: body.loaiXe,
+    custodianUserId: body.custodianUserId,
+  });
+  return data;
 }
 
 export async function getStock(input: { khoId: string; vatTuId: string }): Promise<{
@@ -158,9 +201,9 @@ export async function listReceipts(query: ListReceiptsQuery): Promise<Paginated<
       }),
     ]);
     const merged = [
-      ...(nhap.data.rows ?? []),
-      ...(ban.data.rows ?? []),
-      ...(kiem.data.rows ?? []),
+      ...(nhap.data.rows ?? []).map((p) => normalizePhieuRow(p, 'nhap')),
+      ...(ban.data.rows ?? []).map((p) => normalizePhieuRow(p, 'ban')),
+      ...(kiem.data.rows ?? []).map((p) => normalizePhieuRow(p, 'kiem_ke')),
     ].sort((a, b) => b.taoLuc.localeCompare(a.taoLuc));
     return { data: merged, meta: { total: merged.length, page, pageSize } };
   }
@@ -169,12 +212,41 @@ export async function listReceipts(query: ListReceiptsQuery): Promise<Paginated<
   const { data } = await client.get<BeList<PhieuHeader>>(path, {
     params: { khoId, status, nccId, partyId, from, to, q, page, pageSize },
   });
-  let rows = data.rows ?? [];
+  let rows = (data.rows ?? []).map((p) => normalizePhieuRow(p, kind));
   // BACKEND CHƯA LỌC gì cả — `svc.listPhieu*()` không nhận tham số, `core/list.js`
   // chỉ cắt offset/limit. Lọc lại ở client để màn "lịch sử mua của hộ" không hiện
   // phiếu của hộ khác. Bỏ được khi BE thêm filter (xem PROGRESS).
   if (partyId) rows = rows.filter((p) => p.kind === 'ban' && p.partyId === partyId);
   return { data: rows, meta: { total: data.total ?? rows.length, page, pageSize } };
+}
+
+/**
+ * Chuẩn hoá 1 row phiếu về `PhieuHeader` mobile chờ.
+ *
+ * BE `/kho/phieu-{nhap,ban,kiem}` KHÔNG set `kind` trên row (endpoint đã tự phân
+ * loại) — mobile phải bơm lại theo path đã gọi để `PhieuCard` biết dùng meta/route
+ * nào. `tongSoLuong`/`tongTien` cũng có thể trả camel/snake khác nhau hoặc dùng
+ * alias khác — coerce mọi biến thể về số hữu hạn để UI không show NaN.
+ */
+function normalizePhieuRow(raw: unknown, kind: ReceiptKind): PhieuHeader {
+  const src = (raw ?? {}) as Record<string, unknown>;
+  const toNum = (v: unknown): number => {
+    const n = typeof v === 'string' ? Number(v) : (v as number);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const tongSL = toNum(
+    src.tongSoLuong ?? src.tong_so_luong ?? src.totalQty ?? src.total_qty ?? src.tongSl,
+  );
+  const tongTT = toNum(
+    src.tongTien ?? src.tong_tien ?? src.totalAmount ?? src.total_amount ?? src.tongThanhTien,
+  );
+  return {
+    ...(src as object),
+    kind: (src.kind as ReceiptKind) ?? kind,
+    tongSoLuong: tongSL,
+    tongTien: tongTT,
+    anh: Array.isArray(src.anh) ? (src.anh as string[]) : [],
+  } as PhieuHeader;
 }
 
 /**
@@ -187,7 +259,9 @@ export async function listReceipts(query: ListReceiptsQuery): Promise<Paginated<
  */
 function toPhieuFull(phieu: PhieuHeader): PhieuFull {
   if (phieu.kind === 'kiem_ke') return { phieu, dongHang: [] };
-  const dongHang = phieu.dongHang.map((d) => {
+  // `dongHang` có thể thiếu ở phiếu cũ hoặc lượt response BE bị cắt ngắn — guard để
+  // detail screen không crash "Cannot read property 'map' of undefined".
+  const dongHang = (phieu.dongHang ?? []).map((d) => {
     const sku = MOCK_VATTU.find((v) => v.id === d.vatTuId);
     const heSo = d.heSoQuyDoiSnapshot ?? sku?.heSoQuyDoi;
     return {
@@ -493,10 +567,12 @@ export async function createPhieuBan(body: CreateReceiptBody): Promise<PhieuFull
     if (!body.dongHang.length) {
       throw new MockApiError('Phiếu phải có ít nhất một dòng hàng.', 'empty_dong_hang', 400);
     }
-    // Khách hàng BẮT BUỘC — mirror backend `kho/service.js` (đổi 2026-08-19, bỏ
-    // "khách lẻ"). Mock không được dễ dãi hơn thật, không thì demo qua nhưng
-    // real mode 400.
-    if (!body.partyId) {
+    // Khách có hồ sơ (household/cooperative) BẮT BUỘC partyId; khách vãng lai
+    // (partyKind='khach_le') được miễn.
+    // NỢ BACKEND: `kho/service.js` hiện vẫn ném 400 `thieu_khach_hang` khi thiếu
+    // partyId (bỏ "khách lẻ" 2026-08-19). Để bật bán lẻ, BE cần chấp nhận
+    // partyKind='khach_le' + `khachLe{ten,sdt}` (xem PROGRESS.md). Mock nới trước.
+    if (body.partyKind !== 'khach_le' && !body.partyId) {
       throw new MockApiError('Phiếu bán phải có khách hàng.', 'thieu_khach_hang', 400);
     }
     // Aggregate check overstock theo vatTuId
@@ -522,6 +598,21 @@ export async function createPhieuBan(body: CreateReceiptBody): Promise<PhieuFull
     const kho = MOCK_KHO.find((k) => k.id === body.khoId);
     const taoLuc = nowIso();
     const totals = computeTotals(body.dongHang);
+    const tongTien = Math.max(0, totals.tongTien - (body.giamGia ?? 0));
+    // Thanh toán ngay (mock-first): clamp số thu ≤ phải thu, khởi tạo lần thu đầu.
+    const soThu = Math.max(0, Math.min(body.thanhToan?.soTien ?? 0, tongTien));
+    const lanThu: LanThu[] =
+      soThu > 0
+        ? [
+            {
+              id: nextLanThuId(),
+              soTien: soThu,
+              phuongThuc: body.thanhToan?.phuongThuc ?? 'tien_mat',
+              nguoiThu: 'Admin',
+              thuLuc: taoLuc,
+            },
+          ]
+        : [];
     const phieu: PhieuBan = {
       id,
       kind: 'ban',
@@ -531,11 +622,16 @@ export async function createPhieuBan(body: CreateReceiptBody): Promise<PhieuFull
       partyId: body.partyId,
       partyName: body.partyName,
       partyKind: body.partyKind ?? 'household',
+      khachLe: body.khachLe,
       giamGia: body.giamGia,
       trangThai: 'ghi',
       ghiChu: body.ghiChu,
       tongSoLuong: totals.tongSoLuong,
-      tongTien: totals.tongTien,
+      // Trừ giảm giá — mirror mockCreatePhieuNhap (dòng ~287).
+      tongTien,
+      daThu: soThu,
+      lanThu,
+      daTra: 0,
       nguoiTao: 'Admin',
       taoLuc,
       anh: body.anh ?? [],

@@ -41,6 +41,12 @@ yarn-error.*
 .idea/
 .vscode/
 
+# Kết quả chạy thử skill (skill-creator) — không đưa vào repo
+.claude/skills/*-workspace/
+
+# Worktree tạm của agent
+.claude/worktrees/
+
 # generated native folders
 /ios
 /android

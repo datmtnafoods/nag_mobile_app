@@ -233,7 +233,7 @@ export default function NewKiemKe() {
             onPress={() => submit.mutate()}
           />
           <Text className="text-small text-ink-muted mt-1 text-center">
-            Sau khi lưu tạm, mở chi tiết để bấm "Cân bằng kho" (ghi các dòng sổ điều chỉnh).
+            Mở chi tiết để "Cân bằng kho".
           </Text>
         </View>
       </KeyboardAvoidingView>

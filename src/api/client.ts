@@ -81,6 +81,25 @@ export function apiErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Đã xảy ra lỗi';
 }
 
+/**
+ * Lỗi do MẤT MẠNG (offline / DNS hỏng / backend không tới) — KHÁC lỗi nghiệp vụ
+ * có response (4xx/5xx). Axios đặt `err.request` mà không có `err.response` khi
+ * request gửi đi nhưng không nhận được phản hồi. Dùng để: hiện câu "đang offline"
+ * thay vì "Network Error", và để sync-queue biết nên GIỮ lại thử sau (vs bỏ vì
+ * lỗi nghiệp vụ). `ERR_NETWORK`/`ECONNABORTED` (timeout) cũng tính là mất mạng.
+ */
+export function laLoiMang(err: unknown): boolean {
+  if (axios.isAxiosError(err)) {
+    if (err.response) return false; // có phản hồi → lỗi nghiệp vụ, không phải mất mạng
+    return (
+      err.code === 'ERR_NETWORK' ||
+      err.code === 'ECONNABORTED' ||
+      Boolean(err.request)
+    );
+  }
+  return false;
+}
+
 /** Trả về HTTP status kèm mock status (mock lỗi có gắn .status trong throw). */
 export function apiErrorStatus(err: unknown): number | undefined {
   if (axios.isAxiosError(err)) return err.response?.status;

@@ -4,6 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { searchParties, createParty } from '../../../api/erp/parties';
+import { laLoiMang } from '../../../api/client';
+import { usePartyQueueStore } from '../../../stores/party-queue';
 import { Input } from '../../../components/Input';
 import { DateField } from '../../../components/DateField';
 import { EmptyState } from '../../../components/EmptyState';
@@ -46,7 +48,24 @@ export function hoHopLe(kq: KetQuaChonHo): boolean {
 /** Giải quyết lựa chọn thành partyId — TẠO hộ mới nếu cần. undefined = không gán. */
 export async function giaiQuyetHo(
   kq: KetQuaChonHo,
-  opts: { lat?: number; lng?: number; diaChiMacDinh?: string },
+  opts: {
+    lat?: number;
+    lng?: number;
+    diaChiMacDinh?: string;
+    /**
+     * Cho phép "khai nhanh offline": mất mạng thì lưu tạm (tên + SĐT) rồi sync
+     * sau, trả tempId 'LOCAL-…'. CHỈ màn "Tạo nông hộ" độc lập bật cờ này —
+     * luồng GÁN hộ vào thửa/phiếu KHÔNG dùng (partyId tạm sẽ vỡ ở backend; đó là
+     * follow-up). Callers không bật cờ vẫn lỗi khi offline như trước.
+     */
+    choPhepOffline?: boolean;
+    /**
+     * Trạng thái mạng do UI truyền vào (từ `useIsOnline()` — cùng nguồn với
+     * banner). `false` → xếp hàng NGAY, khỏi gọi mạng rồi chờ timeout. KHÔNG
+     * dùng `onlineManager` ở đây vì nó cold-start dễ kẹt "online" → nút xoay 15s.
+     */
+    online?: boolean;
+  },
 ): Promise<string | undefined> {
   if (kq.loai === 'bo_qua') return undefined;
   if (kq.loai === 'chon') return kq.party?.id;
@@ -56,17 +75,41 @@ export async function giaiQuyetHo(
   if (phone && !PHONE_RE.test(phone)) throw new Error('Số điện thoại không hợp lệ.');
   const soCccd = kq.soCccd?.trim();
   if (soCccd && !/^\d{12}$/.test(soCccd)) throw new Error('Số CCCD phải gồm đúng 12 chữ số.');
-  const ho = await createParty({
+
+  const input = {
     name: ten,
     phone: phone || undefined,
     address: kq.diaChi.trim() || opts.diaChiMacDinh || undefined,
     lat: opts.lat,
     lng: opts.lng,
-    kind: 'household',
+    kind: 'household' as const,
     cccd: soCccd || undefined,
     dob: kq.namSinh,
     gender: kq.gioiTinh,
-  });
+  };
+
+  // Khai nhanh offline (chỉ màn "Tạo nông hộ"). Mô hình "thử-rồi-lùi":
+  //  - `online === false` (UI báo offline) → xếp hàng NGAY, khỏi chờ timeout.
+  //  - Ngược lại → cứ gửi thật; CHỈ khi lỗi MẠNG (kể cả "có sóng không tới
+  //    server") mới lùi về hàng đợi. Lỗi nghiệp vụ (400/409 trùng) vẫn ném để UI
+  //    báo, KHÔNG lưu nhầm. Khi lùi về queue chỉ giữ tên + SĐT (trần PII) —
+  //    CCCD/DOB/địa chỉ bị bỏ; người dùng đã được cảnh báo ở màn tạo.
+  if (opts.choPhepOffline) {
+    if (opts.online === false) {
+      return usePartyQueueStore.getState().enqueue({ name: ten, phone: phone || undefined });
+    }
+    try {
+      const ho = await createParty(input);
+      return ho.id;
+    } catch (err) {
+      if (laLoiMang(err)) {
+        return usePartyQueueStore.getState().enqueue({ name: ten, phone: phone || undefined });
+      }
+      throw err;
+    }
+  }
+
+  const ho = await createParty(input);
   return ho.id;
 }
 

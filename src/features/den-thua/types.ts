@@ -131,6 +131,25 @@ export interface ChiTietThuHoach {
   maTruyXuat?: string;
   khoiLuongBan?: number;
   daKiemTraCachLy?: boolean;
+  /**
+   * Gắn nhật ký thu hoạch vào 1 lứa (mốc `loai='thu_hoach'`) của thửa. Bền hơn
+   * `lua: number` khi lịch cây bị sửa (mocId gồm cả `thu_hoach_N` hoặc mốc
+   * tuỳ chỉnh sau này). Nhật ký cũ không có mocId → rơi vào nhóm "Chưa gắn
+   * lứa" trong khối Vụ/lứa ở màn chi tiết thửa — không mất dữ liệu.
+   */
+  mocId?: string;
+  ghiChu?: string;
+}
+
+/** Tình trạng cây / sâu bệnh — quan sát có cấu trúc thay vì ô mô tả tự do. */
+export interface ChiTietTinhTrangCay {
+  /** Tên dịch hại / bệnh / triệu chứng — VD "Bọ trĩ", "Nấm Phytophthora", "Vàng lá". */
+  doiTuong: string;
+  mucDo: 'nhe' | 'vua' | 'nang';
+  /** Bộ phận bị hại: Lá / Thân / Cành / Hoa / Quả / Rễ / Gốc. */
+  boPhan?: string[];
+  /** Tỉ lệ ước lượng % cây/diện tích bị hại (0–100). */
+  tiLeUocLuong?: number;
   ghiChu?: string;
 }
 
@@ -138,7 +157,8 @@ export type ChiTietNhatKy =
   | ChiTietBonPhan
   | ChiTietPhunThuoc
   | ChiTietCanhTac
-  | ChiTietThuHoach;
+  | ChiTietThuHoach
+  | ChiTietTinhTrangCay;
 
 export interface NhatKyCanhTac {
   id: string; // NK-YYMMDD-nn
@@ -199,9 +219,14 @@ export interface LichCayTrong {
   /** Từ khoá so khớp `cropName` tự do của backend. */
   tuKhoa: string[];
   mocDau: MocLich[];
-  /** Chu kỳ lặp sau lứa đầu: +thangDiCanh đi cành, +thangThuHoach thu lứa kế. */
-  chuKy: { thangDiCanh: number; thangThuHoach: number };
-  soLuaToiDa: number;
+  /**
+   * Chu kỳ lặp sau lứa đầu: +thangDiCanh đi cành, +thangThuHoach thu lứa kế.
+   * **Optional** — cây thu 1 lứa/vụ (không lặp) không cần khai; timeline dừng ở
+   * `mocDau` cuối. Chỉ có nghĩa khi `mocDau` chứa mốc `thu_hoach`.
+   */
+  chuKy?: { thangDiCanh: number; thangThuHoach: number };
+  /** Số lứa tối đa sinh ra (áp dụng khi có `chuKy`). Mặc định 1 nếu bỏ trống. */
+  soLuaToiDa?: number;
   /**
    * Gợi ý loại nhật ký theo giai đoạn (`LoaiMoc`) hiện tại của thửa. Giai đoạn
    * không có trong map → không gợi ý riêng, form hiện mọi loại ngang nhau.

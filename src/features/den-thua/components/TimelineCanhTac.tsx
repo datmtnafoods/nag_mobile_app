@@ -56,7 +56,8 @@ export function TimelineCanhTac({ mocs, hienTai, onPressMoc }: Props) {
       contentContainerStyle={{ paddingHorizontal: 8, paddingVertical: 4 }}
     >
       {mocs.map((m, i) => {
-        const daQua = i <= hienTai;
+        // `hienTai === -1` = chưa tới mốc nào; không mốc nào highlight.
+        const daQua = hienTai >= 0 && i <= hienTai;
         const laHienTai = i === hienTai;
         const daXacNhan = Boolean(m.ngayThucTe);
         const lech = lechNgay(m.ngayDuKien, m.ngayThucTe);

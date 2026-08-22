@@ -50,7 +50,7 @@ export default function QuetCccd() {
         // KHÔNG in `data` ra alert — chuỗi QR chứa dữ liệu cá nhân (số CCCD…).
         Alert.alert(
           'Mã QR không hợp lệ',
-          'Chưa đọc được mã QR trên thẻ CCCD. Đưa đúng mã QR ở MẶT SAU thẻ (không phải mặt trước) vào khung rồi thử lại.',
+          'Đưa mã QR ở MẶT SAU thẻ CCCD vào khung.',
           [
             { text: 'Đóng', style: 'cancel', onPress: () => router.back() },
             {

@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Input } from '../../../components/Input';
 import { useDeviceLocation } from '../../../hooks/useDeviceLocation';
 import { ghepDiaChi, reverseGeocode } from '../../../api/erp/geocode';
-import { apiErrorMessage } from '../../../api/client';
+import { apiErrorMessage, laLoiMang } from '../../../api/client';
 
 type Props = {
   label?: string;
@@ -58,7 +58,12 @@ export function DiaChiField({
           : 'Đã điền xã/tỉnh — bổ sung số nhà, đường nếu có.',
       );
     } catch (err) {
-      setLoi(apiErrorMessage(err));
+      // Mất mạng cho ra "Network Error" khô khan — nói người dùng gõ tay giúp.
+      setLoi(
+        laLoiMang(err)
+          ? 'Đang offline — chưa tra được địa chỉ. Gõ tay giúp nhé.'
+          : apiErrorMessage(err),
+      );
     } finally {
       setDangTra(false);
     }

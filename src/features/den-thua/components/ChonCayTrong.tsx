@@ -40,10 +40,20 @@ export function ChonCayTrong({ label, giaTri, onChange, placeholder, loaiTru, go
     retry: false,
   });
 
-  const catalog = laChinh ? (sanPhamQuery.data ?? []).map((p) => p.name) : [];
+  const catalog = laChinh
+    ? (Array.isArray(sanPhamQuery.data) ? sanPhamQuery.data : [])
+        .map((p) => p?.name)
+        .filter((n): n is string => typeof n === 'string' && n.length > 0)
+    : [];
   // Nền + (catalog nếu là ô chính), khử trùng tên, rồi loại đúng cây đã chọn ở ô kia
-  // (so trùng TÊN chính xác — khác giống là khác cây).
-  const boLoai = new Set((loaiTru ?? []).map(chuanHoa).filter(Boolean));
+  // (so trùng TÊN chính xác — khác giống là khác cây). Coerce về mảng: BE `crop_xen`
+  // đang là VARCHAR (chưa migrate sang TEXT[]) nên caller có thể lỡ đẩy string qua.
+  const loaiTruList: string[] = Array.isArray(loaiTru)
+    ? loaiTru.filter((x): x is string => typeof x === 'string')
+    : typeof loaiTru === 'string' && (loaiTru as string).trim()
+      ? (loaiTru as string).split(/[,;]/).map((s) => s.trim()).filter(Boolean)
+      : [];
+  const boLoai = new Set(loaiTruList.map(chuanHoa).filter(Boolean));
   const tenCay = Array.from(new Set([...nen, ...catalog])).filter(
     (ten) => !boLoai.has(chuanHoa(ten)),
   );

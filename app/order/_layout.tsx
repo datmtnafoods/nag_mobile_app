@@ -1,6 +1,7 @@
 import { Redirect, Stack, useSegments } from 'expo-router';
 import { useIsAuthenticated } from '../../src/auth/store';
 import { HeaderCloseButton } from '../../src/components/HeaderCloseButton';
+import { SwipeToHome } from '../../src/components/SwipeToHome';
 
 export default function OrderLayout() {
   const isAuth = useIsAuthenticated();
@@ -12,13 +13,16 @@ export default function OrderLayout() {
   }
 
   return (
+    <SwipeToHome>
     <Stack
       screenOptions={{
         headerStyle: { backgroundColor: '#ffffff' },
         headerTintColor: '#111827',
         headerTitleStyle: { fontWeight: '600' },
         contentStyle: { backgroundColor: '#ffffff' },
-        headerLeft: () => <HeaderCloseButton fallbackHref="/orders" />,
+        // Dùng SwipeToHome thay iOS swipe-back mặc định.
+        gestureEnabled: false,
+        headerLeft: () => <HeaderCloseButton fallbackHref="/kho" />,
       }}
     >
       <Stack.Screen name="[id]" options={{ title: 'Chi tiết đơn' }} />
@@ -32,5 +36,6 @@ export default function OrderLayout() {
         options={{ title: 'Chọn giống', presentation: 'modal' }}
       />
     </Stack>
+    </SwipeToHome>
   );
 }

@@ -1,0 +1,57 @@
+{
+  "skill_name": "mobile-ux-ui",
+  "evals": [
+    {
+      "id": 0,
+      "name": "quet-qr-gcn-phap-ly-thua",
+      "prompt": "Sắp tới nghị định bắt buộc thửa phải có giấy tờ pháp lý. GCN quyền sử dụng đất bản mới có mã QR rồi. Làm giúp mình màn quét QR sổ đỏ, quét xong thì hiện thông tin lên màn tạo thửa (app/thua/tao-thua.tsx) để KTV xác nhận. Backend chưa có bảng nào cho món này nên cứ chạy mock trước đã.",
+      "expected_output": "Màn quét theo khuôn app/thua/quet-cccd.tsx (permission-gate 3 trạng thái + Linking.openSettings, useIsFocused, scanLockRef, CameraView barcodeScannerSettings), draft-store nhóm A không persist (PII), router.back() bàn giao, tao-thua.tsx đọc draft. KHÔNG dùng ImagePicker/chụp ảnh cho giấy tờ có QR.",
+      "assertions": [
+        "Tạo màn quét QR mới trong app/ dùng CameraView của expo-camera với barcodeScannerSettings",
+        "Permission-gate xử lý trường hợp canAskAgain=false bằng Linking.openSettings()",
+        "Có cơ chế chống quét trùng: ref khoá (scanLock) và/hoặc useIsFocused để tắt camera khi mất focus",
+        "Bàn giao dữ liệu về màn dưới bằng draft-store zustand KHÔNG persist (không AsyncStorage cho dữ liệu giấy tờ)",
+        "Kết thúc luồng bằng router.back(), không nhét dữ liệu giấy tờ vào router params/URL",
+        "KHÔNG dùng ImagePicker/chụp ảnh làm đường chính cho giấy tờ đã có mã QR",
+        "app/thua/tao-thua.tsx đọc draft và hiển thị thông tin giấy tờ cho KTV xác nhận",
+        "Toàn bộ text hiển thị là tiếng Việt có dấu và dùng thuật ngữ 'thửa' (không dùng 'ruộng')"
+      ],
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "draft-store-persist-kho-xe",
+      "prompt": "Mình cần làm luồng nhận hàng lên xe (kho tạm trên xe): chọn kho nguồn, quét/thêm từng mã vật tư với số lượng, ghi chú, rồi gửi phiếu chuyển. Nhiều bước nên KTV hay bị gọi giữa chừng. Viết cho mình cái store giữ dữ liệu nhập dở đi, chưa cần làm màn.",
+      "expected_output": "Store persist nhóm B theo khuôn receipt-draft.ts: XE_DRAFT_KEY tiền tố 'nag.', persist + createJSONStorage(AsyncStorage) + version + migrate, partialize loại PII/ảnh, ownerUserId + setOwner + reconcile...ForUser, reset(), toCreateBody() trả null khi thiếu. QUAN TRỌNG: đăng ký reset + AsyncStorage.removeItem ở src/auth/wire.ts.",
+      "assertions": [
+        "Store dùng zustand persist với createJSONStorage(() => AsyncStorage) — dữ liệu sống qua việc app bị kill",
+        "Export hằng khoá lưu trữ dạng <X>_DRAFT_KEY với tiền tố 'nag.'",
+        "Khai báo version kèm hàm migrate trong cấu hình persist",
+        "Có partialize loại bỏ PII và ảnh base64 khỏi phần ghi xuống đĩa",
+        "Có ownerUserId + setOwner + hàm reconcile<X>DraftForUser để draft không lẫn giữa hai user trên cùng máy",
+        "Có reset() đưa store về mặc định",
+        "Có toCreateBody() trả null khi dữ liệu chưa đủ điều kiện gửi",
+        "ĐĂNG KÝ store mới ở src/auth/wire.ts: gọi reset() và AsyncStorage.removeItem(<X>_DRAFT_KEY) trong onUnauthorized"
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "api-module-mock-first-bang-gia",
+      "prompt": "Thêm giúp mình tầng gọi API cho bảng giá thu mua nông sản: lấy danh sách giá theo loại quả và phân loại (hàng âu/xô/múc/chợ), và lấy chi tiết 1 dòng giá. Backend bên nag_erp_api chưa dựng module này. Kèm màn danh sách đơn giản để xem giá.",
+      "expected_output": "src/api/erp/<module>.ts theo khuôn MOCK_API: if (MOCK_API) { delay + mock } else client.get; đọc envelope {rows,total} KHÔNG phải data.data; mock store ở src/mocks/; nhánh real throw 'Backend chưa có API...' nếu chưa có endpoint; doc-comment đầu file ghi backend gap. Màn list dùng useQuery queryKey mảng + đủ 3 trạng thái (ActivityIndicator/ErrorState+apiErrorMessage/EmptyState có CTA), SafeAreaView edges, text tiếng Việt.",
+      "assertions": [
+        "Tạo module API mới trong src/api/erp/ import MOCK_API từ ../client",
+        "Mỗi hàm API có nhánh if (MOCK_API) trả dữ liệu mock kèm delay giả lập",
+        "Đọc envelope backend đúng: dùng data.rows cho list, KHÔNG dùng data.data ở bất kỳ đâu",
+        "Dữ liệu mock đặt ở src/mocks/ (không nhét inline trong file API)",
+        "Nhánh real báo lỗi rõ ràng khi backend chưa có endpoint (throw 'Backend chưa có API...')",
+        "Doc-comment đầu file API ghi rõ backend gap và món gì phải đổi khi nối thật",
+        "Màn danh sách dùng useQuery với queryKey dạng mảng",
+        "Màn danh sách xử lý đủ 3 trạng thái: đang tải, lỗi (ErrorState + apiErrorMessage), rỗng (EmptyState)",
+        "Màn dùng SafeAreaView với edges khai báo rõ và toàn bộ text tiếng Việt có dấu"
+      ],
+      "files": []
+    }
+  ]
+}

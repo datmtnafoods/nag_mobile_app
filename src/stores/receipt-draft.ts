@@ -5,6 +5,7 @@ import type {
   CreateReceiptBody,
   DraftLine,
   PartnerDraft,
+  PhuongThucTT,
   ReceiptKind,
 } from '../features/vat-tu/types';
 import type { ViTri } from '../features/location/types';
@@ -23,6 +24,10 @@ type ReceiptDraftState = {
   expectedOn?: string;
   soHoaDon?: string;
   giamGia?: number;
+  // Bán: thanh toán ngay tại quầy.
+  phuongThucTT: PhuongThucTT;
+  /** Số tiền thu ngay khi tạo phiếu. undefined = mặc định thu đủ khi submit. */
+  soTienThu?: number;
   /** Ảnh bằng chứng (data URL, không persist). */
   anh: string[];
   /** Toạ độ nơi lập phiếu (không persist — đo lại mỗi lần mở wizard). */
@@ -39,12 +44,16 @@ type ReceiptDraftState = {
   setExpectedOn: (v: string | undefined) => void;
   setSoHoaDon: (v: string | undefined) => void;
   setGiamGia: (v: number | undefined) => void;
+  setPhuongThucTT: (v: PhuongThucTT) => void;
+  setSoTienThu: (v: number | undefined) => void;
   setAnh: (anh: string[]) => void;
   setViTri: (v: ViTri | undefined) => void;
   reset: () => void;
 
   totalBaseQuantity: () => number;
   totalAmount: () => number;
+  /** Phải thu = tổng tiền − giảm giá (không âm). */
+  totalDue: () => number;
   toCreateBody: () => CreateReceiptBody | null;
 };
 
@@ -58,6 +67,7 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
       kind: null,
       lines: [],
       anh: [],
+      phuongThucTT: 'tien_mat',
 
       setOwner: (userId) => set({ ownerUserId: userId }),
 
@@ -71,6 +81,8 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
           expectedOn: undefined,
           soHoaDon: undefined,
           giamGia: undefined,
+          phuongThucTT: 'tien_mat',
+          soTienThu: undefined,
           anh: [],
           viTri: undefined,
         }),
@@ -81,6 +93,8 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
       setExpectedOn: (v) => set({ expectedOn: v }),
       setSoHoaDon: (v) => set({ soHoaDon: v }),
       setGiamGia: (v) => set({ giamGia: v }),
+      setPhuongThucTT: (v) => set({ phuongThucTT: v }),
+      setSoTienThu: (v) => set({ soTienThu: v }),
       setAnh: (anh) => set({ anh }),
       setViTri: (viTri) => set({ viTri }),
 
@@ -144,6 +158,8 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
           expectedOn: undefined,
           soHoaDon: undefined,
           giamGia: undefined,
+          phuongThucTT: 'tien_mat',
+          soTienThu: undefined,
           anh: [],
           viTri: undefined,
         }),
@@ -161,9 +177,23 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
           return s + price * base;
         }, 0),
 
+      totalDue: () => Math.max(0, get().totalAmount() - (get().giamGia ?? 0)),
+
       toCreateBody: () => {
-        const { kind, khoId, partner, lines, ghiChu, expectedOn, soHoaDon, giamGia, anh, viTri } =
-          get();
+        const {
+          kind,
+          khoId,
+          partner,
+          lines,
+          ghiChu,
+          expectedOn,
+          soHoaDon,
+          giamGia,
+          phuongThucTT,
+          soTienThu,
+          anh,
+          viTri,
+        } = get();
         if (!kind || !khoId || !lines.length) return null;
         const body: CreateReceiptBody = {
           khoId,
@@ -187,26 +217,38 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
           if (soHoaDon) body.soHoaDon = soHoaDon;
           if (giamGia != null) body.giamGia = giamGia;
         } else if (kind === 'ban') {
-          // Khách hàng BẮT BUỘC có hồ sơ — backend ném 400 `thieu_khach_hang`
-          // nếu thiếu partyId. Chặn ngay ở đây thay vì để server từ chối.
-          if (!partner?.id) return null;
-          body.partyId = partner.id;
-          body.partyName = partner.ten;
-          body.partyKind = 'household';
+          if (partner?.kind === 'khachLe') {
+            // Khách vãng lai — không cần hồ sơ. Tên/SĐT tuỳ chọn (PII).
+            body.partyKind = 'khach_le';
+            body.partyName = partner.ten?.trim() || 'Khách lẻ';
+            const sdt = partner.sdt?.trim();
+            body.khachLe = { ten: partner.ten?.trim() || undefined, sdt: sdt || undefined };
+          } else {
+            // Nông hộ / HTX — BẮT BUỘC có hồ sơ (backend ném 400 `thieu_khach_hang`
+            // nếu thiếu partyId). Chặn ngay ở đây thay vì để server từ chối.
+            if (!partner?.id) return null;
+            body.partyId = partner.id;
+            body.partyName = partner.ten;
+            body.partyKind = partner.kind === 'htx' ? 'cooperative' : 'household';
+          }
           if (giamGia != null) body.giamGia = giamGia;
+          // Phải thu = tổng − giảm giá; thu mặc định = đủ khi soTienThu undefined.
+          const phaiThu = Math.max(0, get().totalAmount() - (giamGia ?? 0));
+          const thu = soTienThu == null ? phaiThu : Math.max(0, Math.min(soTienThu, phaiThu));
+          body.thanhToan = { soTien: thu, phuongThuc: phuongThucTT };
         }
         return body;
       },
     }),
     {
       name: RECEIPT_DRAFT_KEY,
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => AsyncStorage),
-      // v1 → v2 chỉ thêm optional field (expectedOn/soHoaDon/giamGia/nccId) — shape v1
+      // v2 → v3 chỉ thêm optional field (phuongThucTT/soTienThu) — shape cũ
       // backward-compat, migrate no-op để tránh warning "no migrate function".
       migrate: (persisted) => persisted as Partial<ReceiptDraftState>,
-      // Persist chỉ meta + lines + ghiChu + expectedOn + soHoaDon + giamGia + ownerUserId.
-      // KHÔNG persist partner (PII) hay anh (data URI to, base64 slow re-encode).
+      // Persist meta + lines + ghiChu + expectedOn + soHoaDon + giamGia + phuongThucTT
+      // + soTienThu + ownerUserId. KHÔNG persist partner (PII) hay anh (data URI to).
       partialize: (state) => ({
         ownerUserId: state.ownerUserId,
         kind: state.kind,
@@ -216,6 +258,8 @@ export const useReceiptDraftStore = create<ReceiptDraftState>()(
         expectedOn: state.expectedOn,
         soHoaDon: state.soHoaDon,
         giamGia: state.giamGia,
+        phuongThucTT: state.phuongThucTT,
+        soTienThu: state.soTienThu,
       }),
     },
   ),

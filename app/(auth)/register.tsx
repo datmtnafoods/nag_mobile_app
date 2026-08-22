@@ -14,6 +14,10 @@ import { useAuthStore } from '../../src/auth/store';
 import { reconcileCartForUser } from '../../src/stores/cart';
 import { reconcileReceiptDraftForUser } from '../../src/stores/receipt-draft';
 import { reconcileKiemDraftForUser } from '../../src/stores/kiem-draft';
+import { reconcilePhieuChuyenDraftForUser } from '../../src/stores/phieu-chuyen-draft';
+import { reconcileHiddenHubForUser } from '../../src/stores/hidden-hub';
+import { reconcilePartyQueueForUser } from '../../src/stores/party-queue';
+import { reconcileKhoTamQueueForUser } from '../../src/stores/kho-tam-queue';
 
 const phoneRegex = /^(0[3-9]\d{8}|\+84[3-9]\d{8})$/;
 
@@ -55,6 +59,10 @@ export default function Register() {
       reconcileCartForUser(data.user.id);
       reconcileReceiptDraftForUser(data.user.id);
       reconcileKiemDraftForUser(data.user.id);
+      reconcilePhieuChuyenDraftForUser(data.user.id);
+      reconcileHiddenHubForUser(data.user.id);
+      reconcilePartyQueueForUser(data.user.id);
+      reconcileKhoTamQueueForUser(data.user.id);
       router.replace('/' as never);
     },
   });

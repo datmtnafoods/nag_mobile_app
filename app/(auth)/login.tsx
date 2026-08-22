@@ -33,6 +33,12 @@ import { safeResolveNext } from '../../src/auth/next';
 import { reconcileCartForUser } from '../../src/stores/cart';
 import { reconcileReceiptDraftForUser } from '../../src/stores/receipt-draft';
 import { reconcileKiemDraftForUser } from '../../src/stores/kiem-draft';
+import { reconcilePhieuChuyenDraftForUser } from '../../src/stores/phieu-chuyen-draft';
+import { reconcileHiddenHubForUser } from '../../src/stores/hidden-hub';
+import { reconcilePartyQueueForUser } from '../../src/stores/party-queue';
+import { reconcileKhoTamQueueForUser } from '../../src/stores/kho-tam-queue';
+import { flushPartyQueue } from '../../src/api/erp/party-sync';
+import { flushKhoQueue } from '../../src/api/erp/kho-sync';
 
 const schema = z.object({
   email: z
@@ -58,6 +64,13 @@ export default function Login() {
   // để tránh nhấp nháy UI.
   const [nho, setNho] = useState<boolean>(false);
 
+  // Dev shortcut: mở app __DEV__ + backend thật → form có sẵn cặp test đầu list,
+  // đỡ gõ mỗi lần restart Metro. Bundle production không dính (__DEV__ = false).
+  // Nếu user đã lưu credentials khác qua "Nhớ mật khẩu" → useEffect dưới ghi đè.
+  const devDefault =
+    __DEV__ && !MOCK_API
+      ? { email: DEV_LOGIN_HINTS[0]!.email, password: DEV_LOGIN_HINTS[0]!.password }
+      : { email: '', password: '' };
   const {
     control,
     handleSubmit,
@@ -65,7 +78,7 @@ export default function Login() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: devDefault,
   });
 
   // Prefill sau khi mount — SecureStore async, không dùng làm defaultValues được.
@@ -99,6 +112,13 @@ export default function Login() {
       reconcileCartForUser(data.user.id);
       reconcileReceiptDraftForUser(data.user.id);
       reconcileKiemDraftForUser(data.user.id);
+      reconcilePhieuChuyenDraftForUser(data.user.id);
+      reconcileHiddenHubForUser(data.user.id);
+      reconcilePartyQueueForUser(data.user.id);
+      reconcileKhoTamQueueForUser(data.user.id);
+      // Vừa đăng nhập là đang online → gửi các hộ + kho tạm khai offline (nếu còn) ngay.
+      void flushPartyQueue();
+      void flushKhoQueue();
       // Nạp scope (nông trạm / vùng) — SAU setSession vì client gọi cần Bearer token.
       // Fail-open: scope lỗi (backend cũ, mạng chập) không chặn login; UI mobile
       // sẽ hiển thị "chưa gán trạm" và fallback về createdBy khi lọc.

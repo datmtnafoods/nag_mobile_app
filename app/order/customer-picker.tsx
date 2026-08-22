@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { searchParties } from '../../src/api/erp/parties';
 import { useCartStore } from '../../src/stores/cart';
 import { Input } from '../../src/components/Input';
 import { Button } from '../../src/components/Button';
+import { useDebouncedValue } from '../../src/hooks/useDebouncedValue';
 import { PROVINCE_LABELS } from '../../src/features/orders/types';
 import type { Party, Province } from '../../src/features/orders/types';
 
@@ -35,7 +36,7 @@ type Mode = 'search' | 'manual';
 export default function CustomerPicker() {
   const [mode, setMode] = useState<Mode>('search');
   const [q, setQ] = useState('');
-  const [debouncedQ, setDebouncedQ] = useState('');
+  const debouncedQ = useDebouncedValue(q, 300);
   const [manualName, setManualName] = useState('');
   const [manualPhone, setManualPhone] = useState('');
   const [manualProvince, setManualProvince] = useState<Province>('gia_lai');
@@ -43,11 +44,6 @@ export default function CustomerPicker() {
 
   const setCustomer = useCartStore((s) => s.setCustomer);
   const setDelivery = useCartStore((s) => s.setDelivery);
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedQ(q), 300);
-    return () => clearTimeout(t);
-  }, [q]);
 
   const partiesQuery = useQuery({
     queryKey: ['parties', debouncedQ],

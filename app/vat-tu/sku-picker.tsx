@@ -16,8 +16,13 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { addMa, listLoai, listVatTu } from '../../src/api/erp/catalog-supplies';
+import { tonKho } from '../../src/api/erp/warehouse';
 import { apiErrorMessage } from '../../src/api/client';
+import { useDebouncedValue } from '../../src/hooks/useDebouncedValue';
+import { useNumericInput } from '../../src/hooks/useNumericInput';
+import { formatVND } from '../../src/features/vat-tu/format';
 import { useReceiptDraftStore } from '../../src/stores/receipt-draft';
+import { usePhieuChuyenDraftStore } from '../../src/stores/phieu-chuyen-draft';
 import { Input } from '../../src/components/Input';
 import { Button } from '../../src/components/Button';
 import { EmptyState } from '../../src/components/EmptyState';
@@ -28,18 +33,36 @@ import { QuantityStepper } from '../../src/features/vat-tu/components/QuantitySt
 import type { VatTu } from '../../src/features/vat-tu/types';
 
 export default function SkuPicker() {
-  const params = useLocalSearchParams<{ pairMa?: string; addToKiem?: string }>();
+  const params = useLocalSearchParams<{
+    pairMa?: string;
+    addToKiem?: string;
+    addToChuyen?: string;
+    khoId?: string;
+    editGia?: string;
+  }>();
   const pairMa = typeof params.pairMa === 'string' ? params.pairMa : undefined;
   const addToKiem = params.addToKiem === '1';
+  const addToChuyen = params.addToChuyen === '1';
+  const khoId = typeof params.khoId === 'string' && params.khoId ? params.khoId : undefined;
+  // Cho sửa đơn giá tại chỗ — chỉ luồng bán truyền cờ này.
+  const editGia = params.editGia === '1' && !addToChuyen && !addToKiem && !pairMa;
 
   const [q, setQ] = useState('');
+  const qDebounced = useDebouncedValue(q, 300);
   const [loaiId, setLoaiId] = useState<string | undefined>(undefined);
   const [picked, setPicked] = useState<VatTu | null>(null);
   const [qty, setQty] = useState(1);
   const [unit, setUnit] = useState<'co_ban' | 'lon'>('co_ban');
   const [lo, setLo] = useState('');
+  const [gia, setGia] = useState(0);
+  const giaInput = useNumericInput(gia, setGia, { maxDecimals: 0 });
 
-  const addLine = useReceiptDraftStore((s) => s.addLine);
+  const addLineReceipt = useReceiptDraftStore((s) => s.addLine);
+  const addLineChuyen = usePhieuChuyenDraftStore((s) => s.addLine);
+  // Route theo `addToChuyen` param — mặc định (bao gồm nhánh receipt) đi vào
+  // receipt-draft như hôm nay. Không đụng nhánh `addToKiem` (đường riêng, xem
+  // dưới) vì kiểm-kho có shape khác (không SL/đơn vị, chỉ pickedId).
+  const addLine = addToChuyen ? addLineChuyen : addLineReceipt;
   const qc = useQueryClient();
 
   const pairMutation = useMutation({
@@ -68,11 +91,34 @@ export default function SkuPicker() {
   });
 
   const skuQuery = useQuery({
-    queryKey: ['vat-tu', 'list', { q, loaiId }],
-    queryFn: () => listVatTu({ q, loaiId }),
+    queryKey: ['vat-tu', 'list', { q: qDebounced, loaiId }],
+    queryFn: () => listVatTu({ q: qDebounced, loaiId }),
     enabled: !picked,
     staleTime: 30_000,
   });
+
+  // Tồn kho tại kho đang thao tác — 1 request cả bảng, không N+1 per-SKU.
+  const tonQuery = useQuery({
+    queryKey: ['ton-kho', { khoId }],
+    queryFn: () => tonKho({ khoId }),
+    enabled: Boolean(khoId),
+    staleTime: 30_000,
+  });
+  const tonMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of tonQuery.data ?? []) map.set(row.vatTuId, row.soLuong);
+    return map;
+  }, [tonQuery.data]);
+
+  // Gợi ý theo kho: SKU còn tồn nổi lên trước (sort stable, không đổi thứ tự nội bộ).
+  const skuList = useMemo(() => {
+    const data = skuQuery.data ?? [];
+    if (!khoId || !tonQuery.data) return data;
+    return [...data].sort(
+      (a, b) =>
+        ((tonMap.get(b.id) ?? 0) > 0 ? 1 : 0) - ((tonMap.get(a.id) ?? 0) > 0 ? 1 : 0),
+    );
+  }, [skuQuery.data, khoId, tonQuery.data, tonMap]);
 
   const backToList = useCallback(() => {
     setPicked(null);
@@ -104,7 +150,8 @@ export default function SkuPicker() {
       soLuong: qty,
       donVi: unit,
       lo: lo.trim() || undefined,
-      donGia: picked.giaBan,
+      // Chuyển kho nội bộ KHÔNG kèm giá (giá vốn kế thừa từ ledger phía server).
+      donGia: addToChuyen ? undefined : editGia ? gia : picked.giaBan,
     });
     router.back();
   };
@@ -150,12 +197,13 @@ export default function SkuPicker() {
           />
         ) : (
           <FlatList
-            data={skuQuery.data ?? []}
+            data={skuList}
             keyExtractor={(s) => s.id}
             contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
             renderItem={({ item }) => (
               <SkuRow
                 sku={item}
+                ton={khoId && tonQuery.data ? tonMap.get(item.id) ?? 0 : undefined}
                 onPress={() => {
                   if (pairMa) {
                     Alert.alert(
@@ -187,6 +235,7 @@ export default function SkuPicker() {
                   setPicked(item);
                   setUnit('co_ban');
                   setQty(1);
+                  setGia(item.giaBan ?? 0);
                 }}
                 right={<Ionicons name="chevron-forward" size={18} color="#9ca3af" />}
               />
@@ -241,7 +290,10 @@ export default function SkuPicker() {
             <Ionicons name="chevron-back" size={18} color="#6b7280" />
             <Text className="text-caption text-ink-muted ml-1">Chọn vật tư khác</Text>
           </Pressable>
-          <SkuRow sku={picked} />
+          <SkuRow
+            sku={picked}
+            ton={khoId && tonQuery.data ? tonMap.get(picked.id) ?? 0 : undefined}
+          />
           <Text className="text-caption text-ink-muted mt-3 mb-1">Số lượng</Text>
           <QuantityStepper
             sku={picked}
@@ -252,6 +304,23 @@ export default function SkuPicker() {
               setUnit(donVi);
             }}
           />
+          {editGia ? (
+            <View className="mt-3">
+              <Input
+                label={`Đơn giá (đ/${picked.donViCoBan})`}
+                placeholder="Giá bán"
+                keyboardType="decimal-pad"
+                value={giaInput.value}
+                onChangeText={giaInput.onChangeText}
+                onBlur={giaInput.onBlur}
+              />
+              {picked.giaBan != null && gia !== picked.giaBan ? (
+                <Text className="text-small text-ink-muted mt-1">
+                  Giá niêm yết: {formatVND(picked.giaBan)}/{picked.donViCoBan}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
           <View className="mt-3">
             <Input
               label="Lô (không bắt buộc)"

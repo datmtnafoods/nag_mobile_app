@@ -13,12 +13,17 @@
  *
  * Giao thức bản tin (JSON):
  *   Page → RN qua `window.ReactNativeWebView.postMessage`:
- *     {type:'ready'} | {type:'ring', ring} | {type:'error', reason}
+ *     {type:'ready'} | {type:'ring', ring} | {type:'ringClosed', ring}
+ *     {type:'error', reason}
+ *     {type:'plotTap', id}   — chạm vào fill/label của một thửa (mode xem+plots)
+ *     {type:'mapTap'}        — chạm chỗ trống trên map khi đang xem plots
  *   RN → Page qua `window.__onRNMessage(msg)` (RN gọi bằng injectJavaScript):
  *     {type:'init', mode, ring, otherRings, center}
  *     {type:'setRing', ring} | {type:'setMode', mode}
  *     {type:'setGps', gps} | {type:'setOtherRings', rings}
  *     {type:'addMyLocation', gps}
+ *     {type:'setPlots', plots, fit?}  — plots: [{id, ring, center, label, mauFill, mauLine}]
+ *     {type:'focusPlot', id}          — id null = bỏ chọn (không đổi camera)
  */
 
 // Ghim version cho tái lập (như ERP ghim goong-js@1.0.9). MapLibre GL không cần token.
@@ -58,10 +63,15 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
   var mode = 've';
   var ring = [];        // [[lng,lat], ...] — nguồn sự thật của hình đang vẽ
   var other = [];       // ranh thửa khác (chỉ xem)
+  var plots = [];       // [{id, ring, center, label, mauFill, mauLine}] — nhiều thửa có identity
+  var selectedId = null;// id thửa đang chọn (viền dày + nổi hơn)
   var gps = null;       // {lng,lat,doChinhXac}
   // Đã tự-jump về GPS chưa (lần đầu). Tránh giật view khi GPS update liên tục,
   // và tôn trọng thao tác nếu user đã bắt đầu vẽ (ring ≥ 1 đỉnh).
   var daJumpToGps = false;
+  // 'plots' (mặc định): có plots thì để fitPlots căn khung, đừng để GPS giật đè.
+  // 'gps' (Thửa quanh bạn): ưu tiên flyTo về GPS zoom 17 ngay cả khi có plots.
+  var focusGps = false;
   var centerFallback = null;  // căn về đây khi chưa có đỉnh/GPS/thửa nào ([lng,lat])
   var dragIndex = null;
   var lpTimer = null;
@@ -81,7 +91,8 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
     pitchWithRotate: false
   });
   map.touchZoomRotate.disableRotation();
-  map.addControl(new maplibregl.NavigationControl({showCompass:false}), 'top-right');
+  // KHÔNG add NavigationControl: pinch-to-zoom là chuẩn mobile; +/- ở top-right
+  // đâm vào status bar/notch và va với X + hint pill của RN overlay.
   // KHÔNG dùng GeolocateControl: navigator.geolocation trong WKWebView chập chờn.
   // GPS được RN bơm xuống qua setGps + nút "Vị trí của tôi" (native).
 
@@ -129,11 +140,72 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
   function gpsFC(){
     return {type:'FeatureCollection', features: gps ? [{type:'Feature', properties:{}, geometry:{type:'Point', coordinates:[gps.lng, gps.lat]}}] : []};
   }
+  // Nhiều thửa (polygon) — mỗi feature mang id/màu/cờ-chọn để layer đọc trực tiếp.
+  function plotsFC(){
+    return {type:'FeatureCollection', features: plots
+      .filter(function(p){ return p && p.ring && p.ring.length >= 3; })
+      .map(function(p){
+        return {type:'Feature',
+          properties:{id:p.id, mauFill:p.mauFill, mauLine:p.mauLine, sel:(p.id===selectedId?1:0)},
+          geometry:{type:'Polygon', coordinates:[closed(p.ring)]}};
+      })};
+  }
+  // Nhãn thửa (tên hộ) đặt tại centroid RN đã tính.
+  function plotLabelsFC(){
+    return {type:'FeatureCollection', features: plots
+      .filter(function(p){ return p && p.center && p.label; })
+      .map(function(p){
+        return {type:'Feature', properties:{id:p.id, label:p.label},
+          geometry:{type:'Point', coordinates:p.center}};
+      })};
+  }
 
   function firstSymbolId(){
     var layers = (map.getStyle().layers) || [];
     for(var i=0;i<layers.length;i++){ if(layers[i].type === 'symbol') return layers[i].id; }
     return undefined;
+  }
+  // Glyph có sẵn của style (Noto Sans — có dấu tiếng Việt). KHÔNG hardcode
+  // 'Open Sans Regular' vì Liberty của OpenFreeMap không có font đó → nhãn câm.
+  function styleTextFont(){
+    var layers = (map.getStyle().layers) || [];
+    for(var i=0;i<layers.length;i++){
+      var l = layers[i];
+      if(l.type === 'symbol' && l.layout && l.layout['text-font']) return l.layout['text-font'];
+    }
+    return ['Noto Sans Regular'];
+  }
+
+  // ctx.roundRect không có ở mọi WKWebView cũ → tự vẽ bằng arcTo.
+  function roundRect(ctx, x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y,   x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x,   y+h, r);
+    ctx.arcTo(x,   y+h, x,   y,   r);
+    ctx.arcTo(x,   y,   x+w, y,   r);
+    ctx.closePath();
+  }
+
+  // Ảnh nền "chip" cho nhãn tên hộ: vuông bo tròn, khai stretchX/stretchY (9-slice)
+  // để khi icon-text-fit kéo giãn theo chữ thì góc bo giữ nguyên (thành viên thuốc).
+  function addLabelBg(){
+    try{
+      if(map.hasImage('label-bg')) return true;
+      var s = 40, r = 14;
+      var cv = document.createElement('canvas'); cv.width = s; cv.height = s;
+      var ctx = cv.getContext('2d');
+      if(!ctx) return false;
+      ctx.fillStyle = 'rgba(17,24,39,0.85)';
+      roundRect(ctx, 0, 0, s, s, r); ctx.fill();
+      var d = ctx.getImageData(0, 0, s, s);
+      map.addImage('label-bg', {width:s, height:s, data:d.data}, {
+        stretchX: [[r, s-r]],
+        stretchY: [[r, s-r]],
+        content: [8, 6, s-8, s-6],
+      });
+      return true;
+    }catch(e){ return false; }
   }
 
   function addLayers(){
@@ -148,6 +220,44 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
     map.addSource('other', {type:'geojson', data:otherFC()});
     map.addLayer({id:'other-fill', type:'fill', source:'other', paint:{'fill-color':'#38bdf8','fill-opacity':0.15}});
     map.addLayer({id:'other-line', type:'line', source:'other', paint:{'line-color':'#0284c7','line-width':2}});
+    // 2b) Nhiều thửa có identity (mode xem). Màu theo status do RN gán; thửa
+    //     đang chọn dày viền + đậm hơn (đọc property 'sel'). Nhãn tên hộ ở tâm.
+    map.addSource('plots', {type:'geojson', data:plotsFC()});
+    map.addLayer({id:'plots-fill', type:'fill', source:'plots', paint:{
+      'fill-color':['get','mauFill'],
+      'fill-opacity':['case',['==',['get','sel'],1],0.42,0.20],
+    }});
+    map.addLayer({id:'plots-line', type:'line', source:'plots', paint:{
+      'line-color':['get','mauLine'],
+      'line-width':['case',['==',['get','sel'],1],4,2],
+    }});
+    map.addSource('plot-labels', {type:'geojson', data:plotLabelsFC()});
+    // Nhãn tên hộ = "chip" nền tối bo tròn (dễ đọc trên ảnh vệ tinh) — MapLibre
+    // không có nền chữ sẵn nên dùng icon 9-slice co giãn theo chữ. Lỗi canvas →
+    // fallback chữ-trắng-viền (vẫn đọc được).
+    var coBg = addLabelBg();
+    var labelLayout = {
+      'text-field':['get','label'],
+      'text-font': styleTextFont(),
+      'text-size':12.5,
+      'text-anchor':'center',
+      'text-allow-overlap':false,
+      'text-optional':true,
+      'text-max-width':8,
+      'text-padding':2,
+    };
+    var labelPaint = { 'text-color':'#ffffff' };
+    if(coBg){
+      labelLayout['icon-image'] = 'label-bg';
+      labelLayout['icon-text-fit'] = 'both';
+      labelLayout['icon-text-fit-padding'] = [3,8,3,8];
+      labelLayout['icon-optional'] = false;
+      labelLayout['icon-allow-overlap'] = false;
+    } else {
+      labelPaint['text-halo-color'] = 'rgba(17,24,39,0.9)';
+      labelPaint['text-halo-width'] = 1.6;
+    }
+    map.addLayer({id:'plot-labels', type:'symbol', source:'plot-labels', layout:labelLayout, paint:labelPaint});
     // 3) Chấm GPS.
     map.addSource('gps', {type:'geojson', data:gpsFC()});
     map.addLayer({id:'gps-dot', type:'circle', source:'gps', paint:{'circle-radius':7,'circle-color':'#2563eb','circle-stroke-width':3,'circle-stroke-color':'#fff'}});
@@ -171,6 +281,20 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
   function refreshDraft(){ var s = map.getSource('draft'); if(s) s.setData(draftFC()); }
   function refreshOther(){ var s = map.getSource('other'); if(s) s.setData(otherFC()); }
   function refreshGps(){ var s = map.getSource('gps'); if(s) s.setData(gpsFC()); }
+  function refreshPlots(){
+    var s = map.getSource('plots'); if(s) s.setData(plotsFC());
+    var l = map.getSource('plot-labels'); if(l) l.setData(plotLabelsFC());
+  }
+  // Căn khung về toàn bộ thửa đang hiển thị (không trộn ring/gps như fit()).
+  function fitPlots(){
+    var pts = [];
+    plots.forEach(function(p){ if(p && p.ring){ p.ring.forEach(function(c){ pts.push(c); }); } });
+    if(!pts.length) return;
+    var b = new maplibregl.LngLatBounds(pts[0], pts[0]);
+    pts.forEach(function(p){ b.extend(p); });
+    if(pts.length === 1){ map.jumpTo({center:pts[0], zoom:16}); }
+    else { map.fitBounds(b, {padding:64, maxZoom:17, duration:300}); }
+  }
 
   // Bắn ring lên RN (RN tính diện tích/tự-cắt/validate). Dùng sau mỗi thay đổi.
   function emit(){ refreshDraft(); send({type:'ring', ring:ring}); }
@@ -293,10 +417,28 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
     map.on('mouseleave', 'draft-vertex', function(){ map.getCanvas().style.cursor = ''; });
   }
 
+  // Tương tác nhiều-thửa (mode 'xem' + có plots): chạm thửa → plotTap; chạm chỗ
+  // trống → mapTap (đóng card kiểu Booking). Tách khỏi bindEditing để không đụng vẽ.
+  function bindPlots(){
+    map.on('click', 'plots-fill', function(e){
+      if(mode !== 'xem' || !plots.length) return;
+      var f = e.features && e.features[0];
+      if(f && f.properties && f.properties.id != null){ send({type:'plotTap', id:f.properties.id}); }
+    });
+    map.on('click', function(e){
+      if(mode !== 'xem' || !plots.length) return;
+      var hit = map.queryRenderedFeatures(e.point, {layers:['plots-fill']});
+      if(!hit || !hit.length){ send({type:'mapTap'}); }
+    });
+    map.on('mouseenter', 'plots-fill', function(){ map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', 'plots-fill', function(){ map.getCanvas().style.cursor = ''; });
+  }
+
   map.on('load', function(){
     loadedOk = true;
     addLayers();
     bindEditing();
+    bindPlots();
     fit();
     send({type:'ready'});
   });
@@ -309,6 +451,7 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
       ring = m.ring || [];
       other = m.otherRings || [];
       centerFallback = m.center || null;
+      focusGps = !!m.focusGps;
       if(map.getSource('draft')){ refreshDraft(); refreshOther(); fit(); }
       return;
     }
@@ -317,9 +460,11 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
     if(m.type === 'setGps'){
       gps = m.gps || null;
       refreshGps();
-      // Lần đầu có GPS + ring chưa vẽ đỉnh nào ⇒ flyTo vị trí thực tế của KTV
-      // (mặc kệ centerFallback stale). Sau lần đầu bỏ qua để không giật view.
-      if(gps && !daJumpToGps && ring.length === 0){
+      // Lần đầu có GPS + ring chưa vẽ đỉnh nào ⇒ flyTo vị trí thực tế của KTV.
+      // Mặc định (focusGps=false): có plots thì fitPlots là chủ, đừng để GPS
+      // giật đè. focusGps=true (Thửa quanh bạn): bỏ chặn plots, đây chính là
+      // mục đích màn — về đúng vị trí user để nhìn quanh.
+      if(gps && !daJumpToGps && ring.length === 0 && (focusGps || plots.length === 0)){
         map.flyTo({center:[gps.lng, gps.lat], zoom:17, duration:600});
         daJumpToGps = true;
       }
@@ -329,6 +474,24 @@ export const BAN_DO_HTML = `<!DOCTYPE html>
     // kế sẽ auto-flyTo về GPS mới, KTV đỡ pan tay tìm vị trí.
     if(m.type === 'resetGpsJump'){ daJumpToGps = false; return; }
     if(m.type === 'setOtherRings'){ other = m.rings || []; refreshOther(); return; }
+    if(m.type === 'setPlots'){
+      plots = m.plots || [];
+      if(selectedId && !plots.some(function(p){ return p.id === selectedId; })) selectedId = null;
+      if(map.getSource('plots')){ refreshPlots(); if(m.fit){ fitPlots(); } }
+      return;
+    }
+    if(m.type === 'focusPlot'){
+      selectedId = (m.id != null ? m.id : null);
+      if(map.getSource('plots')){
+        refreshPlots();
+        if(selectedId){
+          var sel = null;
+          for(var k=0;k<plots.length;k++){ if(plots[k].id === selectedId){ sel = plots[k]; break; } }
+          if(sel && sel.center){ map.easeTo({center:sel.center, zoom: Math.max(map.getZoom(), 16), duration:300}); }
+        }
+      }
+      return;
+    }
     if(m.type === 'addMyLocation'){
       if(!m.gps) return;
       var c = [m.gps.lng, m.gps.lat];

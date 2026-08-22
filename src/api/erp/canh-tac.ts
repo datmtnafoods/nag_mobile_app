@@ -1,15 +1,15 @@
-import { MOCK_API } from '../client';
+import { client, MOCK_API } from '../client';
 import type { MocDaXacNhan, XacNhanMocBody } from '../../features/den-thua/types';
 import { MOCK_MOC_XAC_NHAN } from '../../mocks/den-thua.mock';
 
 /**
  * Xác nhận mốc canh tác đã xảy ra.
  *
- * BACKEND CHƯA CÓ GÌ — không bảng giai đoạn, không endpoint. Toàn bộ chạy mock.
- * Khi backend dựng (gợi ý: mở rộng `modules/task` với `kind='field_visit'` +
- * `growing_plot_id`, hoặc bảng riêng `plot_milestone`), chỉ cần đổi tầng này.
- *
- * Mock lưu in-memory nên mất khi reload app — chấp nhận được cho demo.
+ * Backend THẬT: module `plot-milestone` ở nag_erp (migration 2026-08-22), nest
+ * dưới thửa — `GET/PUT/DELETE /growing-areas/plots/:plotId/milestones[/:mocId]`.
+ * PUT upsert theo (plotId, mocId); gate quyền `plot-milestone:confirm`.
+ * `nguoiTao`/`taoLuc` backend gán từ JWT — client chỉ gửi `ngayThucTe`/`ghiChu`.
+ * Nhánh MOCK_API giữ để demo local (mock in-memory, mất khi reload).
  */
 
 const MOCK_DELAY = 260;
@@ -19,7 +19,10 @@ export async function listMocDaXacNhan(plotId: string): Promise<MocDaXacNhan[]> 
     await new Promise((r) => setTimeout(r, MOCK_DELAY));
     return MOCK_MOC_XAC_NHAN.filter((m) => m.plotId === plotId);
   }
-  throw new Error('Backend chưa có API lịch canh tác.');
+  const { data } = await client.get<{ rows: MocDaXacNhan[] }>(
+    `/growing-areas/plots/${plotId}/milestones`,
+  );
+  return data.rows ?? [];
 }
 
 export async function xacNhanMoc(body: XacNhanMocBody): Promise<MocDaXacNhan> {
@@ -41,7 +44,11 @@ export async function xacNhanMoc(body: XacNhanMocBody): Promise<MocDaXacNhan> {
     else MOCK_MOC_XAC_NHAN.push(ban);
     return ban;
   }
-  throw new Error('Backend chưa có API lịch canh tác.');
+  const { data } = await client.put<MocDaXacNhan>(
+    `/growing-areas/plots/${body.plotId}/milestones/${body.mocId}`,
+    { ngayThucTe: body.ngayThucTe, ghiChu: body.ghiChu },
+  );
+  return data;
 }
 
 export async function huyXacNhanMoc(plotId: string, mocId: string): Promise<void> {
@@ -51,5 +58,5 @@ export async function huyXacNhanMoc(plotId: string, mocId: string): Promise<void
     if (i >= 0) MOCK_MOC_XAC_NHAN.splice(i, 1);
     return;
   }
-  throw new Error('Backend chưa có API lịch canh tác.');
+  await client.delete(`/growing-areas/plots/${plotId}/milestones/${mocId}`);
 }

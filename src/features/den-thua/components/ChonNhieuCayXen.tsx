@@ -26,6 +26,13 @@ const NGUONG_CAY_NHIEU = 4;
  */
 export function ChonNhieuCayXen({ label, giaTri, onChange, loaiTru }: Props) {
   const [input, setInput] = useState('');
+  // Coerce về mảng string: BE `crop_xen` đang là VARCHAR (chưa migrate sang TEXT[])
+  // nên real mode có thể trả string đơn hoặc null. Bảo vệ ở đây để form không crash.
+  const list: string[] = Array.isArray(giaTri)
+    ? giaTri.filter((x): x is string => typeof x === 'string')
+    : typeof giaTri === 'string' && (giaTri as string).trim()
+      ? (giaTri as string).split(/[,;]/).map((s) => s.trim()).filter(Boolean)
+      : [];
   const trungCayChinh =
     Boolean(loaiTru && input.trim()) && chuanHoaCay(input) === chuanHoaCay(loaiTru!);
 
@@ -34,23 +41,23 @@ export function ChonNhieuCayXen({ label, giaTri, onChange, loaiTru }: Props) {
   if (loaiTru?.trim()) boLoai.add(chuanHoaCay(loaiTru));
   const nen = CAY_XEN_GOI_Y.filter((t) => !boLoai.has(chuanHoaCay(t)));
 
-  const daChonKey = new Set(giaTri.map(chuanHoaCay));
+  const daChonKey = new Set(list.map(chuanHoaCay));
   const toggle = (ten: string) => {
     const k = chuanHoaCay(ten);
     if (daChonKey.has(k)) {
-      onChange(giaTri.filter((x) => chuanHoaCay(x) !== k));
+      onChange(list.filter((x) => chuanHoaCay(x) !== k));
     } else {
-      onChange(themCayXen(giaTri, ten, loaiTru));
+      onChange(themCayXen(list, ten, loaiTru));
     }
   };
 
   const themTay = () => {
     const t = input.trim();
     if (!t || trungCayChinh) return;
-    const next = themCayXen(giaTri, t, loaiTru);
+    const next = themCayXen(list, t, loaiTru);
     onChange(next);
     // Chỉ clear input nếu thực sự đã thêm (tránh user gõ trùng cây đã chọn thì mất chữ).
-    if (next.length !== giaTri.length) setInput('');
+    if (next.length !== list.length) setInput('');
   };
 
   return (
@@ -58,11 +65,11 @@ export function ChonNhieuCayXen({ label, giaTri, onChange, loaiTru }: Props) {
       {label ? <Text className="text-caption text-ink-muted mb-1">{label}</Text> : null}
 
       {/* Hàng "Đã chọn (N)" */}
-      {giaTri.length > 0 ? (
+      {list.length > 0 ? (
         <View className="mb-2">
-          <Text className="text-small text-ink-muted mb-1">Đã chọn ({giaTri.length})</Text>
+          <Text className="text-small text-ink-muted mb-1">Đã chọn ({list.length})</Text>
           <View className="flex-row flex-wrap">
-            {giaTri.map((ten) => (
+            {list.map((ten) => (
               <View
                 key={chuanHoaCay(ten)}
                 className="flex-row items-center rounded-input px-2 py-1 mr-2 mb-1 bg-neutral-100"
@@ -71,7 +78,7 @@ export function ChonNhieuCayXen({ label, giaTri, onChange, loaiTru }: Props) {
                   {ten}
                 </Text>
                 <Pressable
-                  onPress={() => onChange(giaTri.filter((x) => chuanHoaCay(x) !== chuanHoaCay(ten)))}
+                  onPress={() => onChange(list.filter((x) => chuanHoaCay(x) !== chuanHoaCay(ten)))}
                   hitSlop={8}
                   className="ml-2"
                   accessibilityRole="button"
@@ -162,9 +169,9 @@ export function ChonNhieuCayXen({ label, giaTri, onChange, loaiTru }: Props) {
           "{input.trim()}" trùng cây trồng chính — chọn cây khác.
         </Text>
       ) : null}
-      {giaTri.length > NGUONG_CAY_NHIEU ? (
+      {list.length > NGUONG_CAY_NHIEU ? (
         <Text className="text-small text-amber-700">
-          Đang có {giaTri.length} cây xen — nhiều hơn thường lệ, kiểm tra lại xem có nhầm không.
+          Đang có {list.length} cây xen — nhiều hơn thường lệ, kiểm tra lại xem có nhầm không.
         </Text>
       ) : null}
     </View>

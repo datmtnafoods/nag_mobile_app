@@ -1,8 +1,9 @@
 import { useCallback, useRef } from 'react';
 import { Pressable, Text, ActivityIndicator } from 'react-native';
 import type { PressableProps, GestureResponderEvent } from 'react-native';
+import { MAU } from '../theme/tokens';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'success';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'success' | 'danger';
 
 type Props = Omit<PressableProps, 'children'> & {
   label: string;
@@ -16,21 +17,26 @@ const base = 'h-button items-center justify-center rounded-card px-4 flex-row';
 const variants: Record<Variant, { container: string; text: string }> = {
   primary: {
     container: 'bg-primary active:bg-primary-700',
-    text: 'text-white font-semibold text-base',
+    text: 'text-white font-semibold text-body',
   },
   secondary: {
     container: 'bg-white border border-border active:bg-bg-soft',
-    text: 'text-ink font-semibold text-base',
+    text: 'text-ink font-semibold text-body',
   },
   ghost: {
     container: 'bg-transparent active:bg-bg-soft',
-    text: 'text-primary font-semibold text-base',
+    text: 'text-primary font-semibold text-body',
   },
   // "Chốt" (finalize/xác nhận). Xanh đậm khác đỏ primary — dùng ở nút Xong đè
   // lên nền đỏ của bản đồ vẽ ranh: contrast rõ hẳn (ve-ranh.tsx).
   success: {
     container: 'bg-green-700 active:bg-green-800',
-    text: 'text-white font-semibold text-base',
+    text: 'text-white font-semibold text-body',
+  },
+  // Hành động huỷ/đăng xuất — đỏ nhạt (không đặc) để không hét lên như primary.
+  danger: {
+    container: 'bg-primary-50 border border-primary-200 active:bg-primary-100',
+    text: 'text-primary-700 font-semibold text-body',
   },
 };
 
@@ -68,7 +74,9 @@ export function Button({
       {...rest}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? '#fff' : '#dd1c2e'} />
+        <ActivityIndicator
+          color={variant === 'primary' || variant === 'success' ? MAU.white : MAU.primary}
+        />
       ) : (
         <Text className={v.text}>{label}</Text>
       )}

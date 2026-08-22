@@ -10,12 +10,28 @@ import {
   statusLabelForKind,
 } from '../format';
 import { KindBadge } from './KindBadge';
+import { deriveTrangThaiTT, TT_META, tongTienHieuLuc } from '../payment';
+
+const FALLBACK_KIND = {
+  label: 'Phiếu',
+  cta: '',
+  bg: 'bg-neutral-100',
+  text: 'text-ink-muted',
+  border: 'border-border',
+  icon: 'document-outline' as const,
+};
+const FALLBACK_STATUS = {
+  label: 'Không rõ',
+  bg: 'bg-neutral-100',
+  text: 'text-ink-muted',
+  icon: 'help-outline' as const,
+};
 
 /** Border-left tone theo status + kind. */
 function borderForPhieu(phieu: PhieuHeader): string {
   if (phieu.trangThai === 'ke_hoach') return 'border-amber-500';
   if (phieu.trangThai === 'huy') return 'border-red-400';
-  return RECEIPT_KIND_META[phieu.kind].border;
+  return RECEIPT_KIND_META[phieu.kind]?.border ?? 'border-border';
 }
 
 /** Có "Sắp đến" khi phiếu tạm nhập có expectedOn ≤ 3 ngày. */
@@ -28,12 +44,17 @@ function upcomingExpected(phieu: PhieuHeader): boolean {
 }
 
 export function PhieuCard({ phieu, onPress }: { phieu: PhieuHeader; onPress: () => void }) {
-  const kindMeta = RECEIPT_KIND_META[phieu.kind];
-  const statusMeta = RECEIPT_STATUS_META[phieu.trangThai];
+  const kindMeta = RECEIPT_KIND_META[phieu.kind] ?? FALLBACK_KIND;
+  const statusMeta = RECEIPT_STATUS_META[phieu.trangThai] ?? FALLBACK_STATUS;
   const statusLabel = statusLabelForKind(phieu.trangThai, phieu.kind);
   const borderTone = borderForPhieu(phieu);
   const isUpcoming = upcomingExpected(phieu);
   const showAmount = phieu.kind !== 'kiem_ke';
+  // Badge thanh toán — chỉ phiếu bán đã có lớp TIỀN (daThu != null); phiếu cũ bỏ qua.
+  const ttStatus =
+    phieu.kind === 'ban' && phieu.trangThai === 'ghi' && phieu.daThu != null
+      ? deriveTrangThaiTT(phieu.daThu, tongTienHieuLuc(phieu))
+      : null;
 
   return (
     <Pressable
@@ -59,6 +80,13 @@ export function PhieuCard({ phieu, onPress }: { phieu: PhieuHeader; onPress: () 
           {isUpcoming ? (
             <View className="rounded-input bg-amber-100 border border-amber-300 px-2 py-0.5">
               <Text className="text-small text-amber-900 font-semibold">Sắp đến</Text>
+            </View>
+          ) : null}
+          {ttStatus ? (
+            <View className={`rounded-input px-2 py-0.5 ${TT_META[ttStatus].bg}`}>
+              <Text className={`text-small font-semibold ${TT_META[ttStatus].text}`}>
+                {TT_META[ttStatus].label}
+              </Text>
             </View>
           ) : null}
         </View>

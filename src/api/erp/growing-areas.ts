@@ -1,4 +1,5 @@
-import { client, MOCK_API } from '../client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { client, MOCK_API, laLoiMang } from '../client';
 import type {
   CreateThuaDatBody,
   KetQuaDoThua,
@@ -16,6 +17,35 @@ import { MOCK_THUA_DAT, nextThuaId } from '../../mocks/den-thua.mock';
 import { getPartiesByIds } from './parties';
 
 const MOCK_DELAY = 320;
+
+/**
+ * Cache danh sách thửa để DÒ THỬA chạy được khi offline (phép so trùng là
+ * point-in-polygon thuần client — chỉ thiếu danh sách thửa khi mất mạng).
+ *
+ * PII: chỉ cache `ThuaDat` THUẦN (hình học + cây + trạng thái) — KHÔNG có tên/
+ * SĐT hộ (thứ đó nằm ở `ThuaDatKemHo`, ghép runtime từ `parties`, không đi qua
+ * đây). Đúng khuôn "không persist PII" của repo.
+ */
+const THUA_CACHE_KEY = 'nag.thua-cache';
+
+async function docThuaCache(): Promise<ThuaDat[] | null> {
+  try {
+    const raw = await AsyncStorage.getItem(THUA_CACHE_KEY);
+    if (!raw) return null;
+    const arr: unknown = JSON.parse(raw);
+    return Array.isArray(arr) ? (arr as ThuaDat[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function ghiThuaCache(plots: ThuaDat[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(THUA_CACHE_KEY, JSON.stringify(plots));
+  } catch {
+    // Cache chỉ là bonus offline — ghi hỏng thì thôi, không làm vỡ luồng.
+  }
+}
 
 class MockApiError extends Error {
   code: string;
@@ -41,11 +71,37 @@ export async function listPlots(
     await new Promise((r) => setTimeout(r, MOCK_DELAY));
     return MOCK_THUA_DAT.filter((p) => !query.status || p.status === query.status);
   }
-  const { data } = await client.get<{ rows: ThuaDat[]; total: number }>(
-    '/growing-areas/plots',
-    { params: query },
-  );
-  return data.rows ?? [];
+  try {
+    const { data } = await client.get<{ rows: ThuaDat[]; total: number }>(
+      '/growing-areas/plots',
+      { params: query },
+    );
+    // Normalize `cropXen`: BE VARCHAR trả string ("Ngô, Đậu") — parse về array cho
+    // đồng nhất với type mobile. Sau migration VARCHAR → TEXT[] bên `nag_erp` thì
+    // bỏ đoạn này (giữ nguyên `data.rows ?? []`).
+    const plots = (data.rows ?? []).map((p) => ({ ...p, cropXen: chuanHoaCropXen(p.cropXen) }));
+    // Chỉ cache khi lấy TOÀN BỘ (không lọc status) để không ghi đè cache đầy đủ
+    // bằng một tập con — dò thửa cần cả danh sách.
+    if (!query.status) void ghiThuaCache(plots);
+    return plots;
+  } catch (err) {
+    // Mất mạng → rơi về cache đã sync (nếu có) để dò thửa vẫn chạy offline.
+    // Lỗi nghiệp vụ (4xx/5xx) thì KHÔNG nuốt — ném tiếp như cũ.
+    if (laLoiMang(err)) {
+      const cached = await docThuaCache();
+      if (cached) return query.status ? cached.filter((p) => p.status === query.status) : cached;
+    }
+    throw err;
+  }
+}
+
+/** BE `crop_xen` là VARCHAR — coerce về `string[]` trước khi vào UI. */
+function chuanHoaCropXen(raw: unknown): string[] | undefined {
+  if (Array.isArray(raw)) return raw.filter((x): x is string => typeof x === 'string');
+  if (typeof raw === 'string' && raw.trim()) {
+    return raw.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+  }
+  return undefined;
 }
 
 /**
@@ -122,14 +178,19 @@ export async function createPlot(body: CreateThuaDatBody): Promise<ThuaDat> {
     cropName: body.cropName,
     note: body.note,
   };
-  // Cây xen: gửi mảng khi có ≥1 cây. Backend hiện là VARCHAR — gửi array sẽ 400
-  // tới khi migration `crop_xen: VARCHAR → TEXT[]` hoàn tất bên `nag_erp`.
-  if (body.cropXen?.length) payload.cropXen = body.cropXen;
+  // Cây xen: BE `crop_xen` HIỆN LÀ VARCHAR — service gọi `.trim()` trên input.cropXen
+  // nên gửi array sẽ ném "input.cropXen?.trim is not a function". Serialize sang string
+  // ngăn cách dấu phẩy. Khi migration `crop_xen: VARCHAR → TEXT[]` xong bên `nag_erp`,
+  // đổi lại thành `payload.cropXen = body.cropXen`.
+  if (body.cropXen?.length) payload.cropXen = body.cropXen.join(', ');
   // Backend thật BẮT BUỘC partyId (400 nếu thiếu) — chỉ đính khi có. Thửa không
   // hộ là hành vi mock; nối thật thì phải nới `service.createPlot`.
   if (body.partyId) payload.partyId = body.partyId;
+  // Ngày trồng → cột `planted_at` (nag_erp migration 2026-08-22). Backend map
+  // `ngayGoc`, dùng làm mốc T+0 tính lịch canh tác.
+  if (body.ngayGoc) payload.ngayGoc = body.ngayGoc;
   const { data } = await client.post<ThuaDat>('/growing-areas/plots', payload);
-  return data;
+  return { ...data, cropXen: chuanHoaCropXen(data.cropXen) };
 }
 
 /**
@@ -148,7 +209,7 @@ export async function ganNongHoChoThua(plotId: string, partyId: string): Promise
     return thua;
   }
   const { data } = await client.patch<ThuaDat>(`/growing-areas/plots/${plotId}`, { partyId });
-  return data;
+  return { ...data, cropXen: chuanHoaCropXen(data.cropXen) };
 }
 
 /**
@@ -184,10 +245,17 @@ export async function updatePlot(
     if (patch.ngayGoc !== undefined) thua.ngayGoc = patch.ngayGoc;
     return thua;
   }
-  // Backend chưa có cột `planted_at` — bỏ `ngayGoc` khỏi payload (gửi lên sẽ bị bỏ im lặng).
-  const { ngayGoc: _boQua, ...payload } = patch;
+  // `ngayGoc` → cột `planted_at` (nag_erp migration 2026-08-22) — nay backend
+  // nhận + trả về, giữ trong payload. `cropXen` vẫn phải serialize riêng (VARCHAR).
+  const { cropXen: _cropXen, ...phanConLai } = patch;
+  const payload: Record<string, unknown> = { ...phanConLai };
+  // Serialize array → string cho VARCHAR BE (xem doc-comment `createPlot`). Mảng rỗng
+  // = clear → gửi chuỗi rỗng để BE overwrite null; undefined = không đụng field.
+  if (_cropXen !== undefined) {
+    payload.cropXen = _cropXen.length ? _cropXen.join(', ') : '';
+  }
   const { data } = await client.patch<ThuaDat>(`/growing-areas/plots/${plotId}`, payload);
-  return data;
+  return { ...data, cropXen: chuanHoaCropXen(data.cropXen) };
 }
 
 /** Bán kính coi là "gần đây" khi GPS rơi ngoài mọi ranh thửa. */

@@ -89,8 +89,8 @@ export default function PhieuNhapDetail() {
   }
 
   const phieu = q.data.phieu as PhieuNhap;
-  const dongHang = q.data.dongHang;
-  const statusMeta = RECEIPT_STATUS_META[phieu.trangThai];
+  const dongHang = q.data.dongHang ?? [];
+  const statusMeta = RECEIPT_STATUS_META[phieu.trangThai] ?? { bg: 'bg-neutral-100', text: 'text-ink-muted' };
   const statusLabel = statusLabelForKind(phieu.trangThai, 'nhap');
   const isHuy = phieu.trangThai === 'huy';
   const isKeHoach = phieu.trangThai === 'ke_hoach';

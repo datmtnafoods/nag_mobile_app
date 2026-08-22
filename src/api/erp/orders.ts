@@ -16,6 +16,16 @@ function delay<T>(value: T, ms = MOCK_DELAY): Promise<T> {
   return new Promise((r) => setTimeout(() => r(value), ms));
 }
 
+/**
+ * Bóc object đơn từ response bất kể envelope: backend seed-orders có endpoint bọc
+ * `{data: obj}`, có endpoint trả thẳng obj — nhận cả hai, tránh `undefined` gây
+ * crash react-query (cùng loại bug envelope với `catalog.ts`/commit 7e14c05).
+ */
+function bocObj<T>(data: T | { data?: T }): T {
+  const wrapped = (data as { data?: T })?.data;
+  return wrapped !== undefined ? wrapped : (data as T);
+}
+
 function paginate<T>(all: T[], page = 1, pageSize = 20): Paginated<T> {
   const total = all.length;
   const start = (page - 1) * pageSize;
@@ -131,8 +141,8 @@ export async function getOrder(id: string): Promise<SeedOrder> {
     if (!order) throw new Error('Không tìm thấy đơn hàng');
     return delay(order);
   }
-  const { data } = await client.get<{ data: SeedOrder }>(`/seed-orders/orders/${id}`);
-  return data.data;
+  const { data } = await client.get<SeedOrder | { data?: SeedOrder }>(`/seed-orders/orders/${id}`);
+  return bocObj(data);
 }
 
 export async function createOrder(body: CreateOrderBody, createdBy = 'me'): Promise<SeedOrder> {
@@ -140,8 +150,8 @@ export async function createOrder(body: CreateOrderBody, createdBy = 'me'): Prom
     const order = mockCreateOrder(body, createdBy);
     return delay(order);
   }
-  const { data } = await client.post<{ data: SeedOrder }>('/seed-orders/orders', body);
-  return data.data;
+  const { data } = await client.post<SeedOrder | { data?: SeedOrder }>('/seed-orders/orders', body);
+  return bocObj(data);
 }
 
 export async function updateOrderStatus(id: string, body: UpdateStatusBody): Promise<SeedOrder> {
@@ -158,9 +168,9 @@ export async function updateOrderStatus(id: string, body: UpdateStatusBody): Pro
     MOCK_ORDER_STORE[idx] = next;
     return delay(next);
   }
-  const { data } = await client.patch<{ data: SeedOrder }>(
+  const { data } = await client.patch<SeedOrder | { data?: SeedOrder }>(
     `/seed-orders/orders/${id}/status`,
     body,
   );
-  return data.data;
+  return bocObj(data);
 }

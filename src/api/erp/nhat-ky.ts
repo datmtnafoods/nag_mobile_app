@@ -8,20 +8,28 @@ import type {
 import { MOCK_NHAT_KY, nextNhatKyId } from '../../mocks/den-thua.mock';
 
 /**
- * Nhật ký canh tác.
+ * Nhật ký canh tác — W5.
  *
- * BACKEND CHƯA CÓ MODULE NÀY. Thứ gần nhất là bảng `task` + `task_update`
- * (`07_task.sql`) — đã chốt schema, có sẵn `kind='field_visit'` và cột
- * `growing_plot_id`, contract HTTP cũng đã viết sẵn ở web SPA
- * (`features/task/api/http.ts`), nhưng `src/modules/task/` chưa được dựng.
+ * Backend **v0 Mongo có** ở `nag_erp_api/src/modules/task/` (commit 74dfd75):
+ * `GET/POST /tasks?kind=field_visit&growingPlotId=…`. Sẽ **tách và thay bằng
+ * `cultivation_log` Postgres** trong đợt trục canh tác DB (nag_erp plan §9.6),
+ * lúc đó có thể đổi ID prefix và shape response — nên KHÔNG nối cứng shape:
+ * dùng lại chính type ở đây và ép ở tầng service là biên phòng tuyến.
  *
- * Shape ở đây bám theo bảng đó để đợt nối backend chỉ phải đổi tầng này, không
- * phải sửa UI. Hai chỗ sẽ cần xử lý thêm khi nối thật:
- *   - `anh` hiện là data URL base64 (giống mọi nghiệp vụ khác trong hệ) →
- *     backend thật nên đổi sang objectKey MinIO.
- *   - `ghiAmUri` là file cục bộ. Backend ĐANG CHẶN CỨNG audio ở
- *     `core/chat-media.js isAllowed()` (chỉ cho image/video + vài đuôi tài
- *     liệu), nên ghi âm chưa upload được — phải nới whitelist trước.
+ * **Backend đang vứt yên lặng** hai field, mobile chủ động strip trước khi gửi
+ * để log rõ đây là hành vi cố ý (không phải bug), và để lượt migrate tìm được
+ * hết nơi cần đổi khi backend nhận thật:
+ *   - `anh` (data URL base64): `task/service.js:41` hard-code `anh: []`. Sau
+ *     này backend sẽ nhận objectKey MinIO — thay đổi ở đây, không đụng UI.
+ *   - `ghiAmUri` / `ghiAmGiay`: whitelist `core/chat-media.js isAllowed()` chỉ
+ *     cho `image/*` + `video/*` + vài đuôi tài liệu, không có `audio/*`. Phải
+ *     nới whitelist backend trước khi ghi âm upload được.
+ *
+ * **`dongVatTu`** (SKU vật tư dùng khi bón/phun) pass-through — BE hiện chưa
+ * đọc field này (không có trong `task/service.js`). Chỉ ghi nhận, KHÔNG trừ tồn
+ * kho ở bất kỳ nơi nào; khi BE thêm cột thì UI không phải đổi.
+ *
+ * Ảnh + ghi âm vẫn được **giữ ở nhánh MOCK_API** để demo local thấy đủ.
  */
 
 const MOCK_DELAY = 300;
@@ -90,7 +98,10 @@ export async function taoNhatKy(body: CreateNhatKyBody): Promise<NhatKyCanhTac> 
     MOCK_NHAT_KY.unshift(nk);
     return nk;
   }
-  const { plotId, ...phanConLai } = body;
+  // Strip explicit các field BE đang vứt (`anh`, `ghiAmUri`, `ghiAmGiay`) — xem
+  // doc-comment đầu file. Server sẽ trả bản ghi không có ảnh/âm; nếu muốn thấy
+  // đủ trên UI khi demo, chạy MOCK_API=1.
+  const { plotId, anh: _anh, ghiAmUri: _ga, ghiAmGiay: _gg, ...phanConLai } = body;
   const { data } = await client.post<NhatKyCanhTac>('/tasks', {
     kind: 'field_visit',
     growingPlotId: plotId,

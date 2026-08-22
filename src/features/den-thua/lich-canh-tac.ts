@@ -1,46 +1,17 @@
 import type { LichCayTrong, LoaiMoc, LoaiNhatKy, MocCanhTac } from './types';
 
 /**
- * Lịch chuẩn vòng đời cây trồng.
+ * Logic lịch canh tác thuần — KHÔNG chứa dữ liệu.
  *
- * BACKEND CHƯA CÓ GÌ cho phần này — không bảng, không endpoint, không cả cột
- * `planted_at` trên `growing_plot`. Bảng lịch ở đây là hardcode để demo; đợt nối
- * backend thì đổi thành tải về từ cấu hình admin.
+ * DỮ LIỆU lịch nay ở mock store `MOCK_LICH_CAY` (`src/mocks/den-thua.mock.ts`),
+ * gọi qua tầng `src/api/erp/lich-cay.ts` (real chưa có endpoint — throw). Trước
+ * đây tự chứa hằng `LICH_CANH_TAC` chỉ có chanh leo, sửa được lịch buộc phải
+ * đổi code — nay KTV tự khai lịch cho từng loại cây qua màn
+ * `app/thua/lich-cay/[cayId].tsx`, áp cho MỌI thửa trồng cây đó.
  *
- * Lịch chanh leo đọc ngược từ timeline nghiệp vụ cung cấp:
- *   Kích hoạt T+0 · Kiến thiết T+0 · Làm bông T+2 · Thu lứa 1 T+4
- *   Đi cành T+6 · Thu lứa 2 T+7 · Đi cành T+9 · Thu lứa 3 T+10 · …
- * Quy luật: sau lứa 1, cứ +2 tháng đi cành/làm bông rồi +1 tháng nữa thu lứa
- * tiếp — chu kỳ 3 tháng lặp lại. Riêng lứa đầu dài hơn: +2 làm bông, +2 nữa thu.
+ * Backend gap giữ nguyên: chưa có bảng `crop_catalog`/`crop_stage`, chưa có cột
+ * `planted_at` trên `growing_plot`. Khi nag_erp §9.6 dựng xong thì đổi tầng API.
  */
-
-export const LICH_CANH_TAC: Record<string, LichCayTrong> = {
-  chanh_leo: {
-    id: 'chanh_leo',
-    nhan: 'Chanh leo',
-    /** Nhận diện từ `cropName` tự do — so khớp sau khi bỏ dấu, viết thường. */
-    tuKhoa: ['chanh leo', 'chanh day', 'passion'],
-    mocDau: [
-      { loai: 'kich_hoat', nhan: 'Kích hoạt', thang: 0 },
-      { loai: 'kien_thiet', nhan: 'Kiến thiết', thang: 0 },
-      { loai: 'lam_bong', nhan: 'Làm bông', thang: 2 },
-      { loai: 'thu_hoach', nhan: 'Thu hoạch lứa 1', thang: 4, lua: 1 },
-    ],
-    chuKy: { thangDiCanh: 2, thangThuHoach: 3 },
-    soLuaToiDa: 8,
-    // Giai đoạn nào thì loại việc nào hay làm — để form đẩy chip gợi ý lên trước.
-    goiYTheoGiaiDoan: {
-      kich_hoat: ['canh_tac'],
-      kien_thiet: ['canh_tac', 'bon_phan'],
-      lam_bong: ['bon_phan', 'phun_thuoc', 'canh_tac'],
-      di_canh: ['canh_tac', 'bon_phan'],
-      thu_hoach: ['thu_hoach', 'phun_thuoc'],
-    },
-  },
-  // Cà phê / bơ / ổi: KHUNG ĐÃ SẴN, chưa có lịch thật.
-  // Cố ý để trống thay vì bịa — thửa cây chưa có lịch sẽ không hiện timeline,
-  // chỉ có nhật ký thường. Nghiệp vụ cung cấp mốc thì thêm vào đây là chạy.
-};
 
 /** Bỏ dấu tiếng Việt để so khớp `cropName` tự do. */
 function boDau(s: string): string {
@@ -56,12 +27,18 @@ function boDau(s: string): string {
 /**
  * `cropName` là TEXT tự do ở backend ("Chanh leo tím", "chanh dây vàng"…) nên
  * phải so khớp mềm. Không nhận ra → trả null → không hiện timeline.
+ *
+ * Nhận `dsLich` làm tham số (không đọc hằng nội bộ) để hook `useMocThua` có thể
+ * bơm dữ liệu từ query vào.
  */
-export function nhanDangCayTrong(cropName?: string | null): LichCayTrong | null {
+export function nhanDangCayTrong(
+  cropName: string | null | undefined,
+  dsLich: LichCayTrong[],
+): LichCayTrong | null {
   if (!cropName?.trim()) return null;
   const ten = boDau(cropName);
-  for (const lich of Object.values(LICH_CANH_TAC)) {
-    if (lich.tuKhoa.some((k) => ten.includes(boDau(k)))) return lich;
+  for (const lich of dsLich) {
+    if (lich.tuKhoa.some((k) => k.trim() && ten.includes(boDau(k)))) return lich;
   }
   return null;
 }
@@ -87,8 +64,9 @@ function themThang(goc: Date, thang: number): Date {
 /**
  * Sinh danh sách mốc từ ngày gốc theo lịch chuẩn.
  *
- * Sinh tới `soLuaToiDa` lứa — không cắt theo "hôm nay" vì KTV cần nhìn thấy cả
- * mốc sắp tới để biết lần sau quay lại làm gì.
+ * Sinh tới `soLuaToiDa` lứa (nếu có `chuKy`) — không cắt theo "hôm nay" vì KTV
+ * cần nhìn thấy cả mốc sắp tới để biết lần sau quay lại làm gì. Cây thu 1 lứa
+ * (không `chuKy`) thì chỉ trả `mocDau`.
  */
 export function tinhMocCanhTac(ngayGocIso: string, lich: LichCayTrong): MocCanhTac[] {
   const goc = new Date(ngayGocIso);
@@ -103,11 +81,15 @@ export function tinhMocCanhTac(ngayGocIso: string, lich: LichCayTrong): MocCanhT
     ngayDuKien: themThang(goc, m.thang).toISOString(),
   }));
 
+  // Không có chu kỳ lặp → chỉ mốc đầu.
+  if (!lich.chuKy) return ra.sort((a, b) => a.thang - b.thang);
+
   // Mốc thu hoạch cuối trong `mocDau` là điểm neo cho chu kỳ lặp.
   const neo = [...lich.mocDau].reverse().find((m) => m.loai === 'thu_hoach');
-  if (!neo) return ra;
+  if (!neo) return ra.sort((a, b) => a.thang - b.thang);
 
-  for (let n = 1; n <= lich.soLuaToiDa - (neo.lua ?? 1); n += 1) {
+  const soLua = Math.max(1, lich.soLuaToiDa ?? 1);
+  for (let n = 1; n <= soLua - (neo.lua ?? 1); n += 1) {
     const thangDiCanh = neo.thang + (n - 1) * lich.chuKy.thangThuHoach + lich.chuKy.thangDiCanh;
     const thangThu = neo.thang + n * lich.chuKy.thangThuHoach;
     const lua = (neo.lua ?? 1) + n;
@@ -132,11 +114,16 @@ export function tinhMocCanhTac(ngayGocIso: string, lich: LichCayTrong): MocCanhT
 }
 
 /**
- * Mốc "hiện tại" = mốc gần nhất đã tới hạn. Chưa tới mốc nào (thửa mới trồng)
- * thì lấy mốc đầu.
+ * Mốc "hiện tại" = mốc gần nhất đã tới hạn.
+ *
+ * Trả **-1** khi CHƯA tới mốc nào (thửa mới trồng, `ngayGoc` còn ở tương lai).
+ * Trước đây trả `0` — nghĩa là mốc đầu luôn hiển thị như "đã qua" kể cả khi lịch
+ * chưa bắt đầu, làm form nhật ký gợi ý sai giai đoạn. UI dùng giá trị này phải
+ * check `>= 0` trước khi so sánh với index (xem `TimelineCanhTac.tsx`,
+ * `app/thua/nhat-ky.tsx`).
  */
 export function chiSoMocHienTai(mocs: MocCanhTac[], bayGio = new Date()): number {
-  let idx = 0;
+  let idx = -1;
   for (let i = 0; i < mocs.length; i += 1) {
     if (new Date(mocs[i]!.ngayDuKien) <= bayGio) idx = i;
     else break;
@@ -163,4 +150,13 @@ export function lechNgay(ngayDuKien: string, ngayThucTe?: string): number | null
   const b = new Date(ngayThucTe).getTime();
   if (Number.isNaN(a) || Number.isNaN(b)) return null;
   return Math.round((b - a) / 86_400_000);
+}
+
+/** Slug an toàn cho `LichCayTrong.id` khi KTV tạo lịch cho cây chưa có. */
+export function slugCay(ten: string): string {
+  return (
+    boDau(ten)
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'cay'
+  );
 }

@@ -28,6 +28,7 @@ import {
   nhanDangCayTrong,
   tinhMocCanhTac,
 } from '../../src/features/den-thua/lich-canh-tac';
+import { listLichCay } from '../../src/api/erp/lich-cay';
 import {
   ChonNongHo,
   giaiQuyetHo,
@@ -143,7 +144,12 @@ export default function TaoThua() {
   const buoc2Xong = hoHopLe(hoKq);
 
   // Xem trước lịch canh tác từ cây chính + ngày kích hoạt (cùng logic màn chi tiết).
-  const lichPreview = useMemo(() => nhanDangCayTrong(cayTrong), [cayTrong]);
+  // Đọc `dsLich` từ store lịch cây — nay có thể chỉnh được, không hardcode.
+  const dsLichQuery = useQuery({ queryKey: ['lich-cay'], queryFn: () => listLichCay() });
+  const lichPreview = useMemo(
+    () => nhanDangCayTrong(cayTrong, dsLichQuery.data ?? []),
+    [cayTrong, dsLichQuery.data],
+  );
   const mocsPreview = useMemo(
     () =>
       lichPreview && ngayGoc ? tinhMocCanhTac(new Date(ngayGoc).toISOString(), lichPreview) : [],
@@ -291,8 +297,7 @@ export default function TaoThua() {
                   </Text>
                 ) : !lichPreview ? (
                   <Text className="text-caption text-ink-muted">
-                    Chưa có lịch canh tác cho cây "{cayTrong.trim()}". Vẫn ghi nhật ký bình thường
-                    được.
+                    Chưa có lịch cho cây "{cayTrong.trim()}".
                   </Text>
                 ) : !ngayGoc ? (
                   <Text className="text-caption text-amber-800">
@@ -302,8 +307,7 @@ export default function TaoThua() {
                   <>
                     <TimelineCanhTac mocs={mocsPreview} hienTai={idxPreview} />
                     <Text className="text-small text-ink-muted mt-2">
-                      Lịch dự kiến từ ngày kích hoạt. Xác nhận từng mốc ở màn chi tiết sau khi tạo
-                      thửa.
+                      Xác nhận từng mốc ở màn chi tiết sau khi tạo thửa.
                     </Text>
                   </>
                 )}

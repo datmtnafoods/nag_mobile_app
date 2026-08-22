@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   View,
   Text,
+  Pressable,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -33,22 +34,119 @@ import {
   THU_HOACH_MAC_DINH,
 } from '../../src/features/den-thua/components/ThuHoachForm';
 import { CanhTacForm, CANH_TAC_MAC_DINH } from '../../src/features/den-thua/components/CanhTacForm';
+import {
+  TinhTrangCayForm,
+  TINH_TRANG_CAY_MAC_DINH,
+} from '../../src/features/den-thua/components/TinhTrangCayForm';
+import { ChonVatTuSheet } from '../../src/features/den-thua/components/ChonVatTuSheet';
+import { ImagePickerRow } from '../../src/features/vat-tu/components/ImagePickerRow';
+import { useNumericInput } from '../../src/hooks/useNumericInput';
+import type { VatTu } from '../../src/features/vat-tu/types';
 import { useDeviceLocation } from '../../src/hooks/useDeviceLocation';
 import { formatDate } from '../../src/features/vat-tu/format';
-import {
-  chiSoMocHienTai,
-  goiYLoaiTheoGiaiDoan,
-  nhanDangCayTrong,
-  tinhMocCanhTac,
-} from '../../src/features/den-thua/lich-canh-tac';
+import { goiYLoaiTheoGiaiDoan } from '../../src/features/den-thua/lich-canh-tac';
+import { useMocThua } from '../../src/features/den-thua/useMocThua';
 import type {
   ChiTietBonPhan,
   ChiTietCanhTac,
   ChiTietNhatKy,
   ChiTietPhunThuoc,
   ChiTietThuHoach,
+  ChiTietTinhTrangCay,
+  DongVatTuNhatKy,
   LoaiNhatKy,
 } from '../../src/features/den-thua/types';
+
+/** Trần ảnh 1 bản ghi nhật ký — cùng nguyên tắc `MAX_ANH_PHIEU` của vật tư. */
+const MAX_ANH_NHAT_KY = 4;
+
+/**
+ * 1 dòng vật tư đã chọn trong form nhật ký. Số lượng có thể sửa; đơn vị readonly
+ * (đơn vị cơ bản của SKU). `useNumericInput` không có `max` nên min=0 đủ.
+ */
+function VatTuBlock({
+  dongVatTu,
+  onDoiSoLuong,
+  onXoa,
+  onMoSheet,
+}: {
+  dongVatTu: DongVatTuNhatKy[];
+  onDoiSoLuong: (vatTuId: string, n: number) => void;
+  onXoa: (vatTuId: string) => void;
+  onMoSheet: () => void;
+}) {
+  return (
+    <View className="mt-2">
+      <Text className="text-caption text-ink-muted mb-1">Vật tư sử dụng (tuỳ chọn)</Text>
+      {dongVatTu.map((d) => (
+        <DongVatTuRow
+          key={d.vatTuId}
+          dong={d}
+          onDoiSoLuong={(n) => onDoiSoLuong(d.vatTuId, n)}
+          onXoa={() => onXoa(d.vatTuId)}
+        />
+      ))}
+      <Pressable
+        onPress={onMoSheet}
+        accessibilityRole="button"
+        accessibilityLabel="Chọn vật tư từ danh mục"
+        className="h-11 rounded-input border border-dashed border-primary items-center justify-center flex-row bg-primary-50 active:opacity-80"
+      >
+        <Ionicons name="add-circle-outline" size={18} color="#dd1c2e" />
+        <Text className="text-primary font-semibold ml-1">Chọn từ danh mục</Text>
+      </Pressable>
+      <Text className="text-small text-ink-muted mt-1">
+        Chỉ ghi nhận vật tư dùng — KHÔNG trừ tồn kho.
+      </Text>
+    </View>
+  );
+}
+
+function DongVatTuRow({
+  dong,
+  onDoiSoLuong,
+  onXoa,
+}: {
+  dong: DongVatTuNhatKy;
+  onDoiSoLuong: (n: number) => void;
+  onXoa: () => void;
+}) {
+  const sl = useNumericInput(dong.soLuong, onDoiSoLuong, { min: 0, maxDecimals: 3 });
+  return (
+    <View className="flex-row items-center rounded-input border border-border bg-white p-2 mb-2">
+      <View className="flex-1 mr-2">
+        <Text className="text-body text-ink font-semibold" numberOfLines={1}>
+          {dong.tenSku}
+        </Text>
+        <Text className="text-small text-ink-muted font-mono" numberOfLines={1}>
+          {dong.vatTuId}
+        </Text>
+      </View>
+      <View style={{ width: 88 }} className="mr-1">
+        <Input
+          keyboardType="numeric"
+          value={sl.value}
+          onChangeText={sl.onChangeText}
+          onBlur={sl.onBlur}
+        />
+      </View>
+      <View style={{ width: 52 }} className="mr-1">
+        <Text className="text-small text-ink-muted" numberOfLines={1}>
+          {dong.donViCoBan}
+        </Text>
+      </View>
+      <Pressable
+        onPress={onXoa}
+        accessibilityRole="button"
+        accessibilityLabel={`Xoá ${dong.tenSku}`}
+        hitSlop={10}
+        className="h-11 w-11 items-center justify-center"
+      >
+        <Ionicons name="trash-outline" size={20} color="#6b7280" />
+      </Pressable>
+    </View>
+  );
+}
 
 /** Hôm nay dạng ISO 'YYYY-MM-DD' (local). */
 function homNayIso(): string {
@@ -67,11 +165,10 @@ function themNgay(iso: string, n: number): string {
   ).padStart(2, '0')}`;
 }
 
-/** Nhãn ô Mô tả theo loại — 2 loại "quan sát" thì bắt buộc. */
+/** Nhãn ô Mô tả theo loại — `canh_tac` bắt buộc; các loại khác đã có chiTiet có cấu trúc. */
 function nhanMoTa(loai: LoaiNhatKy | null): { nhan: string; batBuoc: boolean } {
   if (loai === 'canh_tac') return { nhan: 'Công việc thực hiện *', batBuoc: true };
-  if (loai === 'tinh_trang_cay') return { nhan: 'Mô tả tình trạng *', batBuoc: true };
-  return { nhan: 'Mô tả (tuỳ chọn)', batBuoc: false };
+  return { nhan: 'Mô tả thêm (tuỳ chọn)', batBuoc: false };
 }
 
 export default function GhiNhatKy() {
@@ -90,6 +187,46 @@ export default function GhiNhatKy() {
   const [phunThuoc, setPhunThuoc] = useState<ChiTietPhunThuoc>(PHUN_THUOC_MAC_DINH);
   const [thuHoach, setThuHoach] = useState<ChiTietThuHoach>(THU_HOACH_MAC_DINH);
   const [canhTac, setCanhTac] = useState<ChiTietCanhTac>(CANH_TAC_MAC_DINH);
+  const [tinhTrangCay, setTinhTrangCay] = useState<ChiTietTinhTrangCay>(TINH_TRANG_CAY_MAC_DINH);
+
+  const [anh, setAnh] = useState<string[]>([]);
+
+  // Vật tư sử dụng — chỉ áp dụng cho `bon_phan` / `phun_thuoc`; ghi nhận vào
+  // `dongVatTu`, KHÔNG trừ tồn kho. Đổi loại nhật ký sẽ reset (xem dưới).
+  const [dongVatTu, setDongVatTu] = useState<DongVatTuNhatKy[]>([]);
+  const [sheetVatTuMo, setSheetVatTuMo] = useState(false);
+
+  // Đổi loại nhật ký → reset vật tư đã chọn để tránh gửi kèm nhật ký khác.
+  const doiLoai = (l: LoaiNhatKy) => {
+    if (l !== loai) setDongVatTu([]);
+    setLoai(l);
+  };
+
+  const themVatTu = (sku: VatTu) => {
+    // Chặn trùng theo vatTuId — chỉ 1 dòng cho mỗi SKU.
+    if (dongVatTu.some((d) => d.vatTuId === sku.id)) {
+      Alert.alert('Đã có', `${sku.ten} đã có trong danh sách.`);
+      setSheetVatTuMo(false);
+      return;
+    }
+    setDongVatTu((prev) => [
+      ...prev,
+      { vatTuId: sku.id, tenSku: sku.ten, donViCoBan: sku.donViCoBan, soLuong: 1 },
+    ]);
+    // Auto-fill tên phân/thuốc khi ô đang trống — không đè lên chữ user đã gõ.
+    if (loai === 'bon_phan' && !bonPhan.tenPhan.trim()) {
+      setBonPhan((p) => ({ ...p, tenPhan: sku.ten }));
+    } else if (loai === 'phun_thuoc' && !phunThuoc.tenThuoc.trim()) {
+      setPhunThuoc((p) => ({ ...p, tenThuoc: sku.ten }));
+    }
+    setSheetVatTuMo(false);
+  };
+
+  const xoaVatTu = (vatTuId: string) => {
+    setDongVatTu((prev) => prev.filter((d) => d.vatTuId !== vatTuId));
+  };
+
+  const dongVatTuHopLe = dongVatTu.every((d) => d.soLuong > 0);
 
   const { viTri } = useDeviceLocation({ auto: true, accuracy: Location.Accuracy.High });
 
@@ -102,12 +239,8 @@ export default function GhiNhatKy() {
   const thua = thuaQuery.data;
   const tenHo = thua?.tenHo ?? tenHoParam;
 
-  const lich = useMemo(() => nhanDangCayTrong(thua?.cropName), [thua?.cropName]);
-  const mocs = useMemo(
-    () => (thua?.ngayGoc && lich ? tinhMocCanhTac(thua.ngayGoc, lich) : []),
-    [thua?.ngayGoc, lich],
-  );
-  const giaiDoanMoc = mocs[chiSoMocHienTai(mocs)];
+  const { lich, mocs, idxHienTai } = useMocThua(thua);
+  const giaiDoanMoc = idxHienTai >= 0 ? mocs[idxHienTai] : undefined;
   const goiY = useMemo(
     () => goiYLoaiTheoGiaiDoan(lich, giaiDoanMoc?.loai),
     [lich, giaiDoanMoc?.loai],
@@ -155,7 +288,15 @@ export default function GhiNhatKy() {
         chiTiet = { ...thuHoach, daKiemTraCachLy: !canhBaoCachLy };
       } else if (loai === 'canh_tac') {
         chiTiet = canhTac;
+      } else if (loai === 'tinh_trang_cay') {
+        if (!tinhTrangCay.doiTuong.trim()) throw new Error('Nhập tên dịch hại / bệnh.');
+        chiTiet = tinhTrangCay;
       }
+      // Chỉ gửi `dongVatTu` cho loại có nghĩa (bón phân / phun thuốc).
+      const gopDong =
+        (loai === 'bon_phan' || loai === 'phun_thuoc') && dongVatTu.length > 0
+          ? dongVatTu
+          : undefined;
       return taoNhatKy({
         plotId,
         partyId,
@@ -163,8 +304,10 @@ export default function GhiNhatKy() {
         ngay,
         moTa: moTa.trim() || undefined,
         chiTiet,
-        // Đợt demo chưa gắn ảnh/ghi âm — chỉ gửi chữ.
-        anh: [],
+        // Real mode strip `anh` (nhat-ky.ts) vì backend vứt — có chủ đích;
+        // mock lưu để demo. Ghi âm chưa nối vào form.
+        anh,
+        dongVatTu: gopDong,
         viTri: viTri ?? undefined,
       });
     },
@@ -187,11 +330,14 @@ export default function GhiNhatKy() {
           phunThuoc.thoiGianCachLy > 0
         : loai === 'thu_hoach'
           ? (thuHoach.sanLuong ?? 0) > 0
-          : loai === 'canh_tac' || loai === 'tinh_trang_cay'
-            ? Boolean(moTa.trim())
-            : false;
+          : loai === 'tinh_trang_cay'
+            ? Boolean(tinhTrangCay.doiTuong.trim())
+            : loai === 'canh_tac'
+              ? Boolean(moTa.trim())
+              : false;
 
-  const coTheLuu = Boolean(plotId) && Boolean(loai) && Boolean(ngay) && chiTietHopLe;
+  const coTheLuu =
+    Boolean(plotId) && Boolean(loai) && Boolean(ngay) && chiTietHopLe && dongVatTuHopLe;
 
   if (!plotId) {
     return (
@@ -237,7 +383,7 @@ export default function GhiNhatKy() {
           </View>
 
           <WizardSection title="1 · Loại công việc">
-            <LoaiNhatKyChips value={loai} onChange={setLoai} goiY={goiY} />
+            <LoaiNhatKyChips value={loai} onChange={doiLoai} goiY={goiY} />
           </WizardSection>
 
           {loai ? (
@@ -254,6 +400,16 @@ export default function GhiNhatKy() {
           {loai === 'bon_phan' ? (
             <WizardSection title="3 · Chi tiết bón phân">
               <BonPhanForm value={bonPhan} onChange={setBonPhan} />
+              <VatTuBlock
+                dongVatTu={dongVatTu}
+                onDoiSoLuong={(id, n) =>
+                  setDongVatTu((prev) =>
+                    prev.map((d) => (d.vatTuId === id ? { ...d, soLuong: n } : d)),
+                  )
+                }
+                onXoa={xoaVatTu}
+                onMoSheet={() => setSheetVatTuMo(true)}
+              />
             </WizardSection>
           ) : null}
 
@@ -269,12 +425,27 @@ export default function GhiNhatKy() {
                   </Text>
                 </View>
               ) : null}
+              <VatTuBlock
+                dongVatTu={dongVatTu}
+                onDoiSoLuong={(id, n) =>
+                  setDongVatTu((prev) =>
+                    prev.map((d) => (d.vatTuId === id ? { ...d, soLuong: n } : d)),
+                  )
+                }
+                onXoa={xoaVatTu}
+                onMoSheet={() => setSheetVatTuMo(true)}
+              />
             </WizardSection>
           ) : null}
 
           {loai === 'thu_hoach' ? (
             <WizardSection title="3 · Chi tiết thu hoạch">
-              <ThuHoachForm value={thuHoach} onChange={setThuHoach} />
+              <ThuHoachForm
+                value={thuHoach}
+                onChange={setThuHoach}
+                mocThuHoach={mocs.filter((m) => m.loai === 'thu_hoach')}
+                ngay={ngay}
+              />
               {canhBaoCachLy ? (
                 <View className="rounded-input bg-amber-50 border border-amber-200 p-3 flex-row">
                   <Ionicons name="warning-outline" size={16} color="#92400e" />
@@ -294,6 +465,18 @@ export default function GhiNhatKy() {
           {loai === 'canh_tac' ? (
             <WizardSection title="3 · Chi tiết chăm sóc">
               <CanhTacForm value={canhTac} onChange={setCanhTac} />
+            </WizardSection>
+          ) : null}
+
+          {loai === 'tinh_trang_cay' ? (
+            <WizardSection title="3 · Chi tiết tình trạng cây">
+              <TinhTrangCayForm value={tinhTrangCay} onChange={setTinhTrangCay} />
+            </WizardSection>
+          ) : null}
+
+          {loai ? (
+            <WizardSection title="Ảnh hiện trường (tuỳ chọn)">
+              <ImagePickerRow images={anh} onChange={setAnh} maxCount={MAX_ANH_NHAT_KY} />
             </WizardSection>
           ) : null}
 
@@ -318,6 +501,8 @@ export default function GhiNhatKy() {
               </Text>
               {lichSuQuery.data!.slice(0, 5).map((n) => {
                 const meta = LOAI_NHAT_KY_META[n.loai];
+                const soAnh = n.anh?.length ?? 0;
+                const soVt = n.dongVatTu?.length ?? 0;
                 return (
                   <View key={n.id} className="py-2 border-b border-border">
                     <View className="flex-row items-center">
@@ -325,12 +510,29 @@ export default function GhiNhatKy() {
                       <Text className="text-caption text-ink font-semibold ml-1 flex-1">
                         {meta.nhan}
                       </Text>
+                      {soVt > 0 ? (
+                        <View className="flex-row items-center mr-2">
+                          <Ionicons name="cube-outline" size={12} color="#6b7280" />
+                          <Text className="text-small text-ink-muted ml-0.5">{soVt}</Text>
+                        </View>
+                      ) : null}
+                      {soAnh > 0 ? (
+                        <View className="flex-row items-center mr-2">
+                          <Ionicons name="camera-outline" size={12} color="#6b7280" />
+                          <Text className="text-small text-ink-muted ml-0.5">{soAnh}</Text>
+                        </View>
+                      ) : null}
                       <Text className="text-small text-ink-muted">
                         {formatDate(n.ngay ?? n.taoLuc)}
                       </Text>
                     </View>
                     {n.moTa ? (
                       <Text className="text-small text-ink-muted mt-1">{n.moTa}</Text>
+                    ) : null}
+                    {soVt > 0 ? (
+                      <Text className="text-small text-ink-muted mt-1" numberOfLines={1}>
+                        {n.dongVatTu!.map((d) => `${d.tenSku} × ${d.soLuong} ${d.donViCoBan}`).join(' · ')}
+                      </Text>
                     ) : null}
                   </View>
                 );
@@ -353,6 +555,15 @@ export default function GhiNhatKy() {
           ) : null}
         </View>
       </KeyboardAvoidingView>
+
+      <ChonVatTuSheet
+        visible={sheetVatTuMo}
+        loaiNhatKy={loai}
+        partyId={partyId || undefined}
+        daChon={dongVatTu.map((d) => d.vatTuId)}
+        onChon={themVatTu}
+        onDong={() => setSheetVatTuMo(false)}
+      />
     </SafeAreaView>
   );
 }

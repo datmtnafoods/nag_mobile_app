@@ -11,13 +11,13 @@ import type { ReceiptKind } from './types';
  *
  * Cùng cách làm với `features/den-thua/perms.ts`.
  *
- * Theo `core/rbac.js` (kiểm 2026-08-20), quyền kho hiện chỉ có ở:
+ * Theo `core/rbac.js` (kiểm 2026-08-21), quyền kho hiện có ở:
  *   - `admin`         → `'*'` (toàn quyền)
  *   - `viewer`        → vattu:view, kho:view
- *   - `seed_producer` → vattu:view, kho:view, kho:nhap, kho:kiem
- * `field_staff` (KTV thực địa) KHÔNG có quyền kho nào — gọi thật `GET /kho` trả
- * 403. Nếu nghiệp vụ muốn KTV bán vật tư thì phải nới ở backend, không phải vá
- * bảng phía client (xem follow-up trong docs/PROGRESS.md).
+ *   - `seed_producer` → vattu:view, kho:view, kho:nhap, kho:kiem, kho:chuyen, kho:nhan
+ *   - `field_staff` (KTV Trạm) → vattu:view, kho:view, kho:ban, kho:kiem,
+ *     kho:chuyen, kho:nhan. KHÔNG có `kho:nhap` (kho tổng làm), `kho:huy`,
+ *     `kho:duyet-lech` (cấp trên), `warehouse:manage`, `vattu:manage`.
  */
 
 export type VatTuPerm =
@@ -27,7 +27,11 @@ export type VatTuPerm =
   | 'kho:nhap'
   | 'kho:ban'
   | 'kho:huy'
-  | 'kho:kiem';
+  | 'kho:kiem'
+  | 'kho:chuyen'
+  | 'kho:nhan'
+  | 'kho:duyet-lech'
+  | 'warehouse:manage';
 
 const ALL_VATTU_PERMS: VatTuPerm[] = [
   'vattu:view',
@@ -37,6 +41,10 @@ const ALL_VATTU_PERMS: VatTuPerm[] = [
   'kho:ban',
   'kho:huy',
   'kho:kiem',
+  'kho:chuyen',
+  'kho:nhan',
+  'kho:duyet-lech',
+  'warehouse:manage',
 ];
 
 /**
@@ -75,4 +83,15 @@ export function canDoInventoryCount(perms: Set<VatTuPerm>): boolean {
 
 export function canCreateNcc(perms: Set<VatTuPerm>): boolean {
   return perms.has('vattu:manage');
+}
+
+/** W7 chuyển kho — perm tách theo VIỆC (K2 backend luật). */
+export function canLapPhieuChuyen(perms: Set<VatTuPerm>): boolean {
+  return perms.has('kho:chuyen');
+}
+export function canXacNhanNhanChuyen(perms: Set<VatTuPerm>): boolean {
+  return perms.has('kho:nhan');
+}
+export function canDuyetLechChuyen(perms: Set<VatTuPerm>): boolean {
+  return perms.has('kho:duyet-lech');
 }

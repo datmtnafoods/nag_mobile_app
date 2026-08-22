@@ -4,9 +4,11 @@ import type {
   KhoMove,
   NhaCungCap,
   PhieuBan,
+  PhieuChuyen,
   PhieuHeader,
   PhieuKiemKe,
   PhieuNhap,
+  PhieuTra,
   VatTu,
   VatTuLoai,
 } from '../features/vat-tu/types';
@@ -222,7 +224,25 @@ export const MOCK_VATTU: VatTu[] = [
 export const MOCK_KHO: Kho[] = [
   { id: 'kho_tong', ten: 'Kho Tổng NaGreen', loai: 'tong' },
   { id: 'kho_tr_gl', ten: 'Kho Trạm Gia Lai', loai: 'tram' },
+  // Kho tạm trên xe — K2 (2026-08). custodianUserId trùng userId của tài khoản
+  // demo mặc định (`admin@nafoods.com`) để mock mode có "xe của tôi" mà chọn.
+  {
+    id: 'kho_xe_gl_01',
+    ten: 'Xe Gia Lai · KTV Dung PT',
+    loai: 'xe',
+    loaiXe: 'xe_may',
+    custodianUserId: 'admin-001',
+    custodianName: 'Dung PT',
+  },
 ];
+
+let _khoTamSeq = 0;
+/** Id kho tạm (xe) tạo tại mock — seq riêng, prefix `kho_xe_tam_` để phân biệt
+ *  với kho seed. (Nhánh real: id do BE cấp khi `POST /kho`.) */
+export function nextKhoTamId(): string {
+  _khoTamSeq += 1;
+  return `kho_xe_tam_${String(_khoTamSeq).padStart(2, '0')}`;
+}
 
 // ============ NHÀ CUNG CẤP ============
 
@@ -258,6 +278,11 @@ export function nextNccId(): string {
 
 export const MOCK_PHIEU_STORE: PhieuHeader[] = [];
 export const MOCK_MOVES_STORE: KhoMove[] = [];
+/** Phiếu chuyển kho (K2) — store riêng vì shape khác PhieuHeader (2 kho, có
+ *  variance, có `dongHangThucNhan`). */
+export const MOCK_PHIEU_CHUYEN_STORE: PhieuChuyen[] = [];
+/** Phiếu khách trả (khach_tra) — store riêng, tham chiếu phiếu bán gốc. */
+export const MOCK_PHIEU_TRA_STORE: PhieuTra[] = [];
 
 let _moveSeq = 0;
 export function nextMoveId(): string {
@@ -265,11 +290,35 @@ export function nextMoveId(): string {
   return `M-${String(_moveSeq).padStart(4, '0')}`;
 }
 
+let _lanThuSeq = 1; // LT-0001 đã seed cho P3
+export function nextLanThuId(): string {
+  _lanThuSeq += 1;
+  return `LT-${String(_lanThuSeq).padStart(4, '0')}`;
+}
+
 const _phieuSeqByPrefix: Record<string, Record<string, number>> = {};
-export function nextPhieuId(kind: 'nhap' | 'ban' | 'kiem_ke', shortDate: string): string {
-  const prefix = kind === 'nhap' ? 'NK' : kind === 'ban' ? 'BH' : 'KK';
+export function nextPhieuId(
+  kind: 'nhap' | 'ban' | 'kiem_ke' | 'chuyen' | 'khach_tra',
+  shortDate: string,
+): string {
+  const prefix =
+    kind === 'nhap'
+      ? 'NK'
+      : kind === 'ban'
+        ? 'BH'
+        : kind === 'kiem_ke'
+          ? 'KK'
+          : kind === 'khach_tra'
+            ? 'TR'
+            : 'CK';
   _phieuSeqByPrefix[prefix] ??= {};
-  const existing = MOCK_PHIEU_STORE.filter((p) => p.id.startsWith(`${prefix}-${shortDate}-`)).length;
+  const source: Array<{ id: string }> =
+    prefix === 'CK'
+      ? MOCK_PHIEU_CHUYEN_STORE
+      : prefix === 'TR'
+        ? MOCK_PHIEU_TRA_STORE
+        : MOCK_PHIEU_STORE;
+  const existing = source.filter((p) => p.id.startsWith(`${prefix}-${shortDate}-`)).length;
   const seq = Math.max(existing, _phieuSeqByPrefix[prefix]![shortDate] ?? 0) + 1;
   _phieuSeqByPrefix[prefix]![shortDate] = seq;
   return `${prefix}-${shortDate}-${String(seq).padStart(2, '0')}`;
@@ -372,6 +421,17 @@ const P3: PhieuBan = {
   trangThai: 'ghi',
   tongSoLuong: 5,
   tongTien: 140000,
+  // Đã thu một phần — để list/demo có đủ 3 trạng thái thanh toán.
+  daThu: 100000,
+  lanThu: [
+    {
+      id: 'LT-0001',
+      soTien: 100000,
+      phuongThuc: 'tien_mat',
+      nguoiThu: 'Admin',
+      thuLuc: '2026-08-15T05:00:00Z',
+    },
+  ],
   nguoiTao: 'Admin',
   taoLuc: '2026-08-15T05:00:00Z',
   anh: [],

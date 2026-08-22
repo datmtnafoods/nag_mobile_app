@@ -54,12 +54,16 @@ export default function PhieuKiemDetail() {
     enabled: !!receiptId && q.data?.phieu.trangThai === 'ghi',
   });
   const phieu = q.data?.phieu as PhieuKiemKe | undefined;
+  // `phieu.dongKiem` có thể undefined khi: (a) phiếu vừa load chưa xong, (b) người
+  // dùng deep-link nhầm kind (route thấy id nhưng phiếu là nhap/ban/chuyen — thiếu
+  // hẳn field `dongKiem`), (c) BE trả shape thiếu. Guard `?.` ở mọi điểm truy cập.
+  const dongKiemSafe = phieu?.dongKiem ?? [];
   const skuMetaQuery = useQuery({
-    queryKey: ['sku-meta-kiem', receiptId, phieu?.dongKiem.map((d) => d.vatTuId).join(',')],
+    queryKey: ['sku-meta-kiem', receiptId, dongKiemSafe.map((d) => d.vatTuId).join(',')],
     queryFn: async () => {
       if (!phieu) return {} as Record<string, { ten: string; donViCoBan: string }>;
       const entries = await Promise.all(
-        phieu.dongKiem.map(async (d) => {
+        dongKiemSafe.map(async (d) => {
           try {
             const sku = await getVatTu(d.vatTuId);
             return [d.vatTuId, { ten: sku.ten, donViCoBan: sku.donViCoBan }] as const;
@@ -122,12 +126,13 @@ export default function PhieuKiemDetail() {
   }
 
   const p = q.data.phieu as PhieuKiemKe;
-  const statusMeta = RECEIPT_STATUS_META[p.trangThai];
+  const statusMeta = RECEIPT_STATUS_META[p.trangThai] ?? { bg: 'bg-neutral-100', text: 'text-ink-muted' };
   const statusLabel = statusLabelForKind(p.trangThai, 'kiem_ke');
   const isKeHoach = p.trangThai === 'ke_hoach';
   const isGhi = p.trangThai === 'ghi';
   const isHuy = p.trangThai === 'huy';
-  const totalLech = p.dongKiem.reduce((s, d) => s + (d.lech ?? 0), 0);
+  const dongKiem = p.dongKiem ?? [];
+  const totalLech = dongKiem.reduce((s, d) => s + (d.lech ?? 0), 0);
   const meta = skuMetaQuery.data ?? {};
 
   return (
@@ -173,14 +178,14 @@ export default function PhieuKiemDetail() {
 
         <View className="rounded-card bg-white border border-border p-4 mb-4">
           <Text className="text-caption text-ink-muted mb-3">
-            Dòng đếm ({p.dongKiem.length})
+            Dòng đếm ({dongKiem.length})
           </Text>
-          {p.dongKiem.map((d, i) => {
+          {dongKiem.map((d, i) => {
             const m = meta[d.vatTuId] ?? { ten: d.vatTuId, donViCoBan: '' };
             return (
               <View
                 key={i}
-                className={`py-2 ${i < p.dongKiem.length - 1 ? 'border-b border-border' : ''}`}
+                className={`py-2 ${i < dongKiem.length - 1 ? 'border-b border-border' : ''}`}
               >
                 <View className="flex-row items-start">
                   <View className="h-10 w-10 rounded-input bg-blue-50 items-center justify-center mr-3">

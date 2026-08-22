@@ -3,8 +3,15 @@ import { Ionicons } from '@expo/vector-icons';
 import type { ReceiptKind } from '../types';
 import { RECEIPT_KIND_META } from '../format';
 
+const FALLBACK = {
+  label: 'Phiếu',
+  bg: 'bg-neutral-100',
+  text: 'text-ink-muted',
+  icon: 'document-outline' as const,
+};
+
 export function KindBadge({ kind, small }: { kind: ReceiptKind; small?: boolean }) {
-  const meta = RECEIPT_KIND_META[kind];
+  const meta = RECEIPT_KIND_META[kind] ?? FALLBACK;
   return (
     <View
       className={`self-start flex-row items-center rounded-input px-2 ${meta.bg} ${

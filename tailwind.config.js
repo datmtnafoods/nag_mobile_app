@@ -9,6 +9,7 @@ module.exports = {
           DEFAULT: '#dd1c2e',
           50: '#fef2f3',
           100: '#fde3e5',
+          200: '#fac5cb',
           500: '#dd1c2e',
           600: '#c41726',
           700: '#a3131f',
@@ -34,6 +35,7 @@ module.exports = {
       borderRadius: {
         input: '10px',
         card: '12px',
+        'card-lg': '16px',
         frame: '28px',
       },
       fontSize: {

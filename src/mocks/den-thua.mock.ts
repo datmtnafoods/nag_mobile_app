@@ -1,4 +1,9 @@
-import type { MocDaXacNhan, NhatKyCanhTac, ThuaDat } from '../features/den-thua/types';
+import type {
+  LichCayTrong,
+  MocDaXacNhan,
+  NhatKyCanhTac,
+  ThuaDat,
+} from '../features/den-thua/types';
 import { areaHa, oVuongTuDiem } from '../features/den-thua/geo';
 
 /**
@@ -107,6 +112,13 @@ export const MOCK_NHAT_KY: NhatKyCanhTac[] = [
     loai: 'tinh_trang_cay',
     ngay: '2026-08-16',
     moTa: 'Cây phát triển tốt, có vài lá vàng ở tầng dưới. Đã dặn hộ theo dõi thêm.',
+    chiTiet: {
+      doiTuong: 'Vàng lá tầng dưới',
+      mucDo: 'nhe',
+      boPhan: ['Lá'],
+      tiLeUocLuong: 8,
+      ghiChu: 'Chỉ vài lá già; cần soi thêm sau 1 tuần.',
+    },
     anh: [],
     nguoiTao: 'NV Thị trường (mock)',
     taoLuc: '2026-08-16T01:30:00Z',
@@ -133,6 +145,27 @@ export const MOCK_NHAT_KY: NhatKyCanhTac[] = [
     nguoiTao: 'NV Thị trường (mock)',
     taoLuc: '2026-08-18T02:00:00Z',
   },
+  // Thu hoạch lứa 1 (dự kiến 20/10/2025, thực tế 01/11 — trùng mocId ở
+  // MOCK_MOC_XAC_NHAN). Có mocId để demo khối Vụ/lứa cộng dồn sản lượng.
+  {
+    id: 'NK-251101-01',
+    plotId: 'GP-260810-01',
+    partyId: 'p_001',
+    loai: 'thu_hoach',
+    ngay: '2025-11-01',
+    moTa: 'Lứa 1 thu buổi sáng, đưa về kho luôn.',
+    chiTiet: {
+      sanLuong: 240,
+      phanHang: 'Loại 1',
+      maTruyXuat: 'CL-01-011125',
+      khoiLuongBan: 220,
+      daKiemTraCachLy: true,
+      mocId: 'thu_hoach_1',
+    },
+    anh: [],
+    nguoiTao: 'NV Thị trường (mock)',
+    taoLuc: '2025-11-01T05:00:00Z',
+  },
   {
     id: 'NK-260805-03',
     plotId: 'GP-260810-01',
@@ -141,15 +174,50 @@ export const MOCK_NHAT_KY: NhatKyCanhTac[] = [
     ngay: '2026-08-05',
     moTa: 'Bón thúc sau đợt làm bông.',
     chiTiet: {
-      tenPhan: 'NPK 16-16-8+TE',
+      tenPhan: 'Phân NPK 20-20-15',
       loaiPhan: 'Vô cơ',
       luong: 0.3,
       donVi: 'kg/gốc',
       cachBon: 'Bón rãnh quanh gốc',
     },
+    // Nối tới SKU thật để demo "hộ đã mua" — gợi ý picker ở form nhật ký.
+    dongVatTu: [{ vatTuId: 'vt_phan_npk_20', tenSku: 'Phân NPK 20-20-15', donViCoBan: 'kg', soLuong: 25 }],
     anh: [],
     nguoiTao: 'NV Thị trường (mock)',
     taoLuc: '2026-08-05T01:00:00Z',
+  },
+];
+
+/**
+ * Lịch chuẩn theo loại cây — trước đây là hằng `LICH_CANH_TAC` trong
+ * `lich-canh-tac.ts` (hardcode chỉ có chanh leo). Nay chuyển sang store để KTV
+ * chỉnh được qua `app/thua/lich-cay/[cayId].tsx`; áp cho MỌI thửa trồng cây
+ * khớp `tuKhoa`.
+ *
+ * Cà phê / bơ / ổi để trống có chủ ý — KTV tự khai (không bịa mốc). Seed chanh
+ * leo giữ y nguyên đúng lịch nghiệp vụ gửi (Kích hoạt T+0 · Kiến thiết T+0 ·
+ * Làm bông T+2 · Thu lứa 1 T+4, chu kỳ 2-3 tháng, 8 lứa).
+ */
+export const MOCK_LICH_CAY: LichCayTrong[] = [
+  {
+    id: 'chanh_leo',
+    nhan: 'Chanh leo',
+    tuKhoa: ['chanh leo', 'chanh day', 'passion'],
+    mocDau: [
+      { loai: 'kich_hoat', nhan: 'Kích hoạt', thang: 0 },
+      { loai: 'kien_thiet', nhan: 'Kiến thiết', thang: 0 },
+      { loai: 'lam_bong', nhan: 'Làm bông', thang: 2 },
+      { loai: 'thu_hoach', nhan: 'Thu hoạch lứa 1', thang: 4, lua: 1 },
+    ],
+    chuKy: { thangDiCanh: 2, thangThuHoach: 3 },
+    soLuaToiDa: 8,
+    goiYTheoGiaiDoan: {
+      kich_hoat: ['canh_tac'],
+      kien_thiet: ['canh_tac', 'bon_phan', 'tinh_trang_cay'],
+      lam_bong: ['bon_phan', 'phun_thuoc', 'canh_tac', 'tinh_trang_cay'],
+      di_canh: ['canh_tac', 'bon_phan', 'tinh_trang_cay'],
+      thu_hoach: ['thu_hoach', 'phun_thuoc', 'tinh_trang_cay'],
+    },
   },
 ];
 

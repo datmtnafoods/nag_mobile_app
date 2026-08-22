@@ -101,4 +101,23 @@ export const MOCK_PARTIES: Party[] = [
     lng: 108.0821,
     kind: 'household',
   },
+  // HTX — khách sỉ của luồng bán vật tư (partyKind 'cooperative').
+  {
+    id: 'htx_001',
+    name: 'HTX Nông nghiệp Ia Grai',
+    phones: ['0269357788'],
+    province: 'gia_lai',
+    commune: 'Xã Ia Grai',
+    address: 'Xã Ia Grai, Gia Lai',
+    kind: 'cooperative',
+  },
+  {
+    id: 'htx_002',
+    name: 'HTX Cà phê Chư Păh',
+    phones: ['0269366900'],
+    province: 'gia_lai',
+    commune: 'Xã Chư Păh',
+    address: 'Xã Chư Păh, Gia Lai',
+    kind: 'cooperative',
+  },
 ];

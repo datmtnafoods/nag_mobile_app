@@ -2,15 +2,18 @@ import { View, Text, Pressable } from 'react-native';
 import type { VatTu } from '../types';
 import { formatVND } from '../format';
 import { SkuThumbnail } from './SkuThumbnail';
+import { StockBadge } from './StockBadge';
 
 type Props = {
   sku: VatTu;
   loaiTen?: string;
   onPress?: () => void;
   right?: React.ReactNode;
+  /** Tồn kho tại kho đang thao tác — undefined thì không render badge. */
+  ton?: number;
 };
 
-export function SkuRow({ sku, loaiTen, onPress, right }: Props) {
+export function SkuRow({ sku, loaiTen, onPress, right, ton }: Props) {
   const Container: React.ElementType = onPress ? Pressable : View;
   const isNgung = sku.trangThai === 'ngung';
   return (
@@ -45,6 +48,11 @@ export function SkuRow({ sku, loaiTen, onPress, right }: Props) {
           <Text className="text-caption text-primary font-semibold mt-0.5">
             {formatVND(sku.giaBan)}/{sku.donViCoBan}
           </Text>
+        ) : null}
+        {ton !== undefined ? (
+          <View className="mt-1">
+            <StockBadge soLuong={ton} donViCoBan={sku.donViCoBan} tonMin={sku.tonMin} compact />
+          </View>
         ) : null}
       </View>
       {right}

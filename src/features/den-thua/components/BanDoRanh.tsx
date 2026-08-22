@@ -13,15 +13,28 @@ export type BanDoRanhHandle = {
   resetGpsJump: () => void;
 };
 
+/** Một thửa để render trên bản đồ (mode 'xem', nhiều thửa có identity). RN tính
+ *  sẵn centroid + màu; page chỉ vẽ. */
+export type PlotHienThi = {
+  id: string;
+  ring: Ring;
+  center: [number, number];
+  label: string;
+  mauFill: string;
+  mauLine: string;
+};
+
 // Bản tin RN → Page.
 type ToPage =
-  | { type: 'init'; mode: BanDoMode; ring: Ring; otherRings: Ring[]; center: [number, number] | null }
+  | { type: 'init'; mode: BanDoMode; ring: Ring; otherRings: Ring[]; center: [number, number] | null; focusGps: boolean }
   | { type: 'setRing'; ring: Ring }
   | { type: 'setMode'; mode: BanDoMode }
   | { type: 'setGps'; gps: GpsPoint | null }
   | { type: 'setOtherRings'; rings: Ring[] }
   | { type: 'addMyLocation'; gps: GpsPoint }
-  | { type: 'resetGpsJump' };
+  | { type: 'resetGpsJump' }
+  | { type: 'setPlots'; plots: PlotHienThi[]; fit?: boolean }
+  | { type: 'focusPlot'; id: string | null };
 
 type Props = {
   mode: BanDoMode;
@@ -41,8 +54,19 @@ type Props = {
   initialCenter?: [number, number] | null;
   /** Page báo bản đồ/tile hỏng (mất mạng, CDN chặn) → parent fallback. */
   onMapError?: (reason: string) => void;
+  /** Nhiều thửa để hiển thị (mode 'xem'). Đổi tập id → page tự căn khung. */
+  plots?: PlotHienThi[];
+  /** Id thửa đang chọn — page tô đậm + easeTo. null = bỏ chọn (giữ camera). */
+  focusPlotId?: string | null;
+  /** Chạm một thửa trên bản đồ. */
+  onPlotTap?: (id: string) => void;
+  /** Chạm chỗ trống khi đang xem plots (đóng card nổi). */
+  onMapTap?: () => void;
   /** undefined = flex:1 (toàn màn hình); có số = card cao cố định (chỉ-xem). */
   height?: number;
+  /** 'plots' (mặc định) fit-bounds toàn bộ plots; 'gps' bỏ fit-bounds và
+   *  ưu tiên flyTo về GPS zoom 17 khi có vị trí (dùng cho "Thửa quanh bạn"). */
+  initialFocus?: 'plots' | 'gps';
 };
 
 /**
@@ -51,7 +75,22 @@ type Props = {
  * xuống page. Mọi tính toán hình học nằm ở RN (`geo.ts`), không ở page.
  */
 export const BanDoRanh = forwardRef<BanDoRanhHandle, Props>(function BanDoRanh(
-  { mode, ring, onChangeRing, onRingClosed, gps, otherRings, initialCenter, onMapError, height },
+  {
+    mode,
+    ring,
+    onChangeRing,
+    onRingClosed,
+    gps,
+    otherRings,
+    initialCenter,
+    onMapError,
+    plots,
+    focusPlotId,
+    onPlotTap,
+    onMapTap,
+    height,
+    initialFocus,
+  },
   ref,
 ) {
   const webRef = useRef<WebView>(null);
@@ -84,16 +123,31 @@ export const BanDoRanh = forwardRef<BanDoRanhHandle, Props>(function BanDoRanh(
 
   const onMessage = useCallback(
     (e: WebViewMessageEvent) => {
-      let msg: { type?: string; ring?: Ring; reason?: string };
+      let msg: { type?: string; ring?: Ring; reason?: string; id?: string };
       try {
         msg = JSON.parse(e.nativeEvent.data);
       } catch {
         return;
       }
+      if (msg.type === 'plotTap' && msg.id != null) {
+        onPlotTap?.(msg.id);
+        return;
+      }
+      if (msg.type === 'mapTap') {
+        onMapTap?.();
+        return;
+      }
       if (msg.type === 'ready') {
         readyRef.current = true;
         setReady(true);
-        inject({ type: 'init', mode, ring, otherRings: otherRings ?? [], center: initialCenter ?? null });
+        inject({
+          type: 'init',
+          mode,
+          ring,
+          otherRings: otherRings ?? [],
+          center: initialCenter ?? null,
+          focusGps: initialFocus === 'gps',
+        });
         queue.current.forEach(inject);
         queue.current = [];
         return;
@@ -115,7 +169,7 @@ export const BanDoRanh = forwardRef<BanDoRanhHandle, Props>(function BanDoRanh(
         return;
       }
     },
-    [mode, ring, otherRings, initialCenter, onChangeRing, onRingClosed, onMapError, inject],
+    [mode, ring, otherRings, initialCenter, initialFocus, onChangeRing, onRingClosed, onMapError, onPlotTap, onMapTap, inject],
   );
 
   // Đẩy thay đổi từ parent xuống page. Dùng "key" chuỗi hoá để tránh churn tham chiếu.
@@ -138,6 +192,24 @@ export const BanDoRanh = forwardRef<BanDoRanhHandle, Props>(function BanDoRanh(
   useEffect(() => {
     post({ type: 'setMode', mode });
   }, [mode, post]);
+
+  // Nhiều thửa: gửi khi nội dung đổi; căn khung lại chỉ khi TẬP ID đổi (thêm/bớt/
+  // lọc), không khi chỉ đổi màu/nhãn — tránh giật camera lúc chọn thửa.
+  // `initialFocus='gps'` (Thửa quanh bạn): KHÔNG fit-bounds plots — để flyTo GPS
+  // ở page tự quyết camera, tránh đè zoom 17 về overview.
+  const plotsKey = JSON.stringify(plots ?? []);
+  const plotIdSet = (plots ?? []).map((p) => p.id).join('|');
+  const prevIdSet = useRef<string>('');
+  useEffect(() => {
+    const fit = initialFocus !== 'gps' && plotIdSet !== prevIdSet.current;
+    prevIdSet.current = plotIdSet;
+    post({ type: 'setPlots', plots: plots ?? [], fit });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plotsKey, post]);
+
+  useEffect(() => {
+    post({ type: 'focusPlot', id: focusPlotId ?? null });
+  }, [focusPlotId, post]);
 
   const container =
     height != null

@@ -46,7 +46,15 @@ export default function SuaThongTinThua() {
   useEffect(() => {
     if (daNap || !q.data) return;
     setCayTrong(q.data.cropName ?? '');
-    setCayXenList(q.data.cropXen ?? []);
+    // BE `crop_xen` là VARCHAR (chưa migrate → TEXT[]) nên có thể trả string đơn
+    // ("Ngô, Đậu") — parse về array trước khi đưa vào ChonNhieuCayXen.
+    const raw = q.data.cropXen;
+    const xenArr: string[] = Array.isArray(raw)
+      ? raw.filter((x): x is string => typeof x === 'string')
+      : typeof raw === 'string' && (raw as string).trim()
+        ? (raw as string).split(/[,;]/).map((s) => s.trim()).filter(Boolean)
+        : [];
+    setCayXenList(xenArr);
     setNgayGoc(q.data.ngayGoc ? q.data.ngayGoc.slice(0, 10) : undefined);
     setGhiChu(q.data.note ?? '');
     setDaNap(true);

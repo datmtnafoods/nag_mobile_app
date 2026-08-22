@@ -67,7 +67,7 @@ export function statusLabelForKind(status: PhieuTrangThai, kind: ReceiptKind): s
     if (kind === 'kiem_ke') return 'Đã cân bằng';
     return 'Đã ghi';
   }
-  return RECEIPT_STATUS_META[status].label;
+  return RECEIPT_STATUS_META[status]?.label ?? status;
 }
 
 export const RECEIPT_KIND_META: Record<ReceiptKind, KindMeta> = {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { getPlot, ganNongHoChoThua } from '../../src/api/erp/growing-areas';
 import { useRanhDraftStore } from '../../src/stores/ranh-draft';
-import { listMocDaXacNhan, xacNhanMoc, huyXacNhanMoc } from '../../src/api/erp/canh-tac';
+import { xacNhanMoc, huyXacNhanMoc } from '../../src/api/erp/canh-tac';
+import { luuLichCay } from '../../src/api/erp/lich-cay';
 import { listNhatKy } from '../../src/api/erp/nhat-ky';
 import { apiErrorMessage } from '../../src/api/client';
 import { Button } from '../../src/components/Button';
@@ -34,13 +35,13 @@ import {
 } from '../../src/features/den-thua/components/ChonNongHo';
 import { centroid } from '../../src/features/den-thua/geo';
 import { LOAI_NHAT_KY_META } from '../../src/features/den-thua/components/LoaiNhatKyChips';
-import {
-  chiSoMocHienTai,
-  lechNgay,
-  nhanDangCayTrong,
-  tinhMocCanhTac,
-} from '../../src/features/den-thua/lich-canh-tac';
+import { lechNgay, slugCay } from '../../src/features/den-thua/lich-canh-tac';
+import { useMocThua } from '../../src/features/den-thua/useMocThua';
+import { MauLichSheet, type MauLich } from '../../src/features/den-thua/components/MauLichSheet';
+import { ACCENT_LOAI, giaiDoanHienTai } from '../../src/features/den-thua/giai-doan';
+import { tinhLuaThua, type LuaThua } from '../../src/features/den-thua/vu-lua';
 import type { MocCanhTac } from '../../src/features/den-thua/types';
+import { ACCENT } from '../../src/theme/tokens';
 import { formatDate, formatDateTime } from '../../src/features/vat-tu/format';
 
 const STATUS_META = {
@@ -64,15 +65,12 @@ export default function ChiTietThua() {
   const [mapLoi, setMapLoi] = useState<string | null>(null);
   const [ganMo, setGanMo] = useState(false);
   const [hoKq, setHoKq] = useState<KetQuaChonHo>({ loai: 'chon', party: null });
+  const [xemHetLua, setXemHetLua] = useState(false);
+  const [mauMo, setMauMo] = useState(false);
 
   const thuaQuery = useQuery({
     queryKey: ['thua', plotId],
     queryFn: () => getPlot(plotId),
-    enabled: Boolean(plotId),
-  });
-  const xacNhanQuery = useQuery({
-    queryKey: ['moc-canh-tac', plotId],
-    queryFn: () => listMocDaXacNhan(plotId),
     enabled: Boolean(plotId),
   });
   const nhatKyQuery = useQuery({
@@ -82,19 +80,10 @@ export default function ChiTietThua() {
   });
 
   const thua = thuaQuery.data;
-  const lich = useMemo(() => nhanDangCayTrong(thua?.cropName), [thua?.cropName]);
-
-  /** Mốc theo lịch, gắn ngày thực tế KTV đã xác nhận. */
-  const mocs = useMemo<MocCanhTac[]>(() => {
-    if (!thua?.ngayGoc || !lich) return [];
-    const daXacNhan = new Map((xacNhanQuery.data ?? []).map((m) => [m.mocId, m]));
-    return tinhMocCanhTac(thua.ngayGoc, lich).map((m) => {
-      const xn = daXacNhan.get(m.id);
-      return xn ? { ...m, ngayThucTe: xn.ngayThucTe, ghiChu: xn.ghiChu } : m;
-    });
-  }, [thua?.ngayGoc, lich, xacNhanQuery.data]);
-
-  const idxHienTai = useMemo(() => chiSoMocHienTai(mocs), [mocs]);
+  const { lich, mocs, idxHienTai, dsLich } = useMocThua(thua);
+  const gdHienTai = giaiDoanHienTai(mocs, idxHienTai);
+  const gdAccent = gdHienTai ? ACCENT[ACCENT_LOAI[gdHienTai.moc.loai]] : null;
+  const luaKq = tinhLuaThua(mocs, nhatKyQuery.data ?? []);
 
   const luuMoc = useMutation({
     mutationFn: () => {
@@ -120,6 +109,28 @@ export default function ChiTietThua() {
       dongSheet();
     },
     onError: (err) => Alert.alert('Lỗi', apiErrorMessage(err)),
+  });
+
+  // Tạo nhanh lịch cho cây của thửa từ 1 mẫu (sheet) — không rời màn. Lịch mới
+  // đặt theo cropName, tự khớp lại thửa này; invalidate ['lich-cay'] để timeline
+  // + badge hiện liền.
+  const taoNhanh = useMutation({
+    mutationFn: (mau: MauLich) => {
+      const ten = (thua?.cropName ?? '').trim();
+      return luuLichCay({
+        id: slugCay(ten),
+        nhan: ten,
+        tuKhoa: [ten],
+        mocDau: mau.mocDau,
+        chuKy: mau.chuKy,
+        soLuaToiDa: mau.soLuaToiDa,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lich-cay'] });
+      setMauMo(false);
+    },
+    onError: (err) => Alert.alert('Chưa tạo được lịch', apiErrorMessage(err)),
   });
 
   // Gán (hoặc tạo mới rồi gán) nông hộ cho thửa chưa có hộ — "gán sau".
@@ -190,16 +201,18 @@ export default function ChiTietThua() {
               <View className={`rounded-input px-2 py-1 ${meta.bg}`}>
                 <Text className={`text-small font-semibold ${meta.text}`}>{meta.nhan}</Text>
               </View>
-              {/* Sửa thông tin thửa (cây trồng/xen/ngày/ghi chú) — khác "Sửa ranh" ở thẻ ranh. */}
+              {/* Sửa thông tin thửa (cây trồng/xen/ngày/ghi chú) — khác "Sửa ranh" ở thẻ ranh.
+                  Pill min-h 44 + border + bg-primary-50 để đủ tap target (iOS HIG) và
+                  dễ nhìn thấy giữa cụm chip trạng thái. */}
               <Pressable
                 onPress={() => router.push(`/thua/sua/${thua.id}` as never)}
                 accessibilityRole="button"
                 accessibilityLabel="Sửa thông tin thửa"
                 hitSlop={8}
-                className="mt-2 flex-row items-center active:opacity-70"
+                className="mt-2 min-h-[44px] px-3 flex-row items-center rounded-input border border-primary bg-primary-50 active:opacity-70"
               >
-                <Ionicons name="create-outline" size={16} color="#dd1c2e" />
-                <Text className="text-caption text-primary font-semibold ml-1">Sửa thông tin</Text>
+                <Ionicons name="create-outline" size={18} color="#dd1c2e" />
+                <Text className="text-body text-primary font-semibold ml-1.5">Sửa thông tin</Text>
               </Pressable>
             </View>
           </View>
@@ -256,7 +269,8 @@ export default function ChiTietThua() {
           <View className="rounded-card bg-white border border-border p-4 mb-4">
             <View className="flex-row items-center justify-between mb-2">
               <Text className="text-caption text-ink-muted uppercase">Ranh thửa</Text>
-              {/* Nút Sửa ranh — mở lại màn vẽ với ring hiện tại + plotId, save qua PATCH. */}
+              {/* Nút Sửa ranh — mở lại màn vẽ với ring hiện tại + plotId, save qua PATCH.
+                  Cùng khuôn pill với "Sửa thông tin" để đồng nhất và đạt tap target. */}
               <Pressable
                 onPress={() => {
                   useRanhDraftStore.getState().datRing(thua.boundary);
@@ -265,10 +279,10 @@ export default function ChiTietThua() {
                 accessibilityRole="button"
                 accessibilityLabel="Sửa ranh thửa"
                 hitSlop={8}
-                className="flex-row items-center px-2 py-1 rounded-input active:bg-bg-soft"
+                className="min-h-[44px] px-3 flex-row items-center rounded-input border border-primary bg-primary-50 active:opacity-70"
               >
-                <Ionicons name="create-outline" size={16} color="#dd1c2e" />
-                <Text className="text-caption text-primary font-semibold ml-1">Sửa ranh</Text>
+                <Ionicons name="create-outline" size={18} color="#dd1c2e" />
+                <Text className="text-body text-primary font-semibold ml-1.5">Sửa ranh</Text>
               </Pressable>
             </View>
             {mapLoi ? (
@@ -287,11 +301,44 @@ export default function ChiTietThua() {
 
         {/* Timeline canh tác */}
         <View className="rounded-card bg-white border border-border p-4 mb-4">
-          <Text className="text-caption text-ink-muted uppercase mb-2">Lịch canh tác</Text>
+          <View className="flex-row items-center justify-between mb-2">
+            <Text className="text-caption text-ink-muted uppercase">Lịch canh tác</Text>
+            {/* Lối vào sửa/tạo lịch theo LOẠI CÂY — áp cho mọi thửa cùng cây.
+                Có lịch → "Sửa lịch <cây>"; chưa có (cây trống hoặc không khớp lịch nào)
+                → "Tạo lịch cho <cây>". Cả 2 push cùng route, màn tự nhận diện. */}
+            {thua.cropName ? (
+              <Pressable
+                onPress={() => {
+                  // Chưa có lịch → mở sheet tạo nhanh (chọn mẫu, không rời màn).
+                  // Có lịch → vào editor để sửa.
+                  if (!lich) {
+                    setMauMo(true);
+                    return;
+                  }
+                  router.push({
+                    pathname: '/thua/lich-cay/[cayId]',
+                    params: { cayId: lich.id, tenGoiY: '' },
+                  } as never);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={lich ? `Sửa lịch ${lich.nhan}` : `Tạo lịch cho ${thua.cropName}`}
+                hitSlop={8}
+                className="min-h-[44px] px-3 flex-row items-center rounded-input border border-primary bg-primary-50 active:opacity-70"
+              >
+                <Ionicons
+                  name={lich ? 'create-outline' : 'add-outline'}
+                  size={18}
+                  color="#dd1c2e"
+                />
+                <Text className="text-body text-primary font-semibold ml-1.5" numberOfLines={1}>
+                  {lich ? `Sửa lịch ${lich.nhan}` : 'Tạo lịch cây'}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
           {!lich ? (
             <Text className="text-caption text-ink-muted">
-              Chưa có lịch canh tác cho cây {thua.cropName ? `"${thua.cropName}"` : 'này'}. Vẫn
-              ghi nhật ký bình thường được.
+              Chưa có lịch — vẫn ghi nhật ký bình thường được.
             </Text>
           ) : !thua.ngayGoc ? (
             <Text className="text-caption text-amber-800">
@@ -299,6 +346,19 @@ export default function ChiTietThua() {
             </Text>
           ) : (
             <>
+              {gdHienTai && gdAccent ? (
+                <View
+                  className={`self-start flex-row items-center rounded-full border px-3 py-1 mb-2 ${gdAccent.bg} ${gdAccent.border}`}
+                >
+                  <View
+                    className="h-2 w-2 rounded-full mr-2"
+                    style={{ backgroundColor: gdAccent.icon }}
+                  />
+                  <Text className={`text-caption font-semibold ${gdAccent.text}`}>
+                    {gdHienTai.sapToi ? `Sắp tới: ${gdHienTai.moc.nhan}` : `Đang: ${gdHienTai.moc.nhan}`}
+                  </Text>
+                </View>
+              ) : null}
               <TimelineCanhTac mocs={mocs} hienTai={idxHienTai} onPressMoc={moSheet} />
               <Text className="text-small text-ink-muted mt-2">
                 Chạm vào mốc để xác nhận đã xảy ra.
@@ -306,6 +366,58 @@ export default function ChiTietThua() {
             </>
           )}
         </View>
+
+        {/* Vụ / lứa thu hoạch — chỉ hiện khi có mốc thu_hoach (có lịch + ngayGoc). */}
+        {luaKq.lua.length > 0 ? (
+          <View className="rounded-card bg-white border border-border p-4 mb-4">
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-caption text-ink-muted uppercase">
+                Vụ / lứa thu hoạch ({luaKq.lua.length})
+              </Text>
+              {luaKq.lua.length > 3 ? (
+                <Pressable
+                  onPress={() => setXemHetLua((v) => !v)}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  className="min-h-[36px] px-2 flex-row items-center"
+                >
+                  <Text className="text-caption text-primary font-semibold">
+                    {xemHetLua ? 'Thu gọn' : `Xem tất cả ${luaKq.lua.length} lứa`}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {(() => {
+              // Mặc định thu gọn quanh lứa hiện tại ±1 (chanh leo 8 lứa dễ tràn).
+              const luaHienTaiIdx = luaKq.lua.findIndex(
+                (l) => l.trangThai === 'cho_xac_nhan' || l.trangThai === 'sap_toi',
+              );
+              const anchor = luaHienTaiIdx >= 0 ? luaHienTaiIdx : luaKq.lua.length - 1;
+              const hienDs = xemHetLua
+                ? luaKq.lua
+                : luaKq.lua.slice(Math.max(0, anchor - 1), anchor + 2);
+              return hienDs.map((l) => (
+                <LuaRow
+                  key={l.mocId}
+                  lua={l}
+                  onPress={() => {
+                    const moc = mocs.find((m) => m.id === l.mocId);
+                    if (moc) moSheet(moc);
+                  }}
+                />
+              ));
+            })()}
+            {luaKq.chuaGan.soNhatKy > 0 ? (
+              <View className="mt-2 pt-2 border-t border-border flex-row items-center">
+                <Ionicons name="link-outline" size={14} color="#6b7280" />
+                <Text className="text-small text-ink-muted ml-1 flex-1">
+                  Chưa gắn lứa: {luaKq.chuaGan.soNhatKy} bản ghi ·{' '}
+                  {luaKq.chuaGan.sanLuong.toLocaleString('vi-VN')} kg
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* Nhật ký */}
         <View className="rounded-card bg-white border border-border p-4 mb-4">
@@ -317,6 +429,8 @@ export default function ChiTietThua() {
           ) : (
             (nhatKyQuery.data ?? []).slice(0, 5).map((n) => {
               const lm = LOAI_NHAT_KY_META[n.loai];
+              const soAnh = n.anh?.length ?? 0;
+              const soVt = n.dongVatTu?.length ?? 0;
               return (
                 <View key={n.id} className="py-2 border-b border-border">
                   <View className="flex-row items-center">
@@ -324,6 +438,18 @@ export default function ChiTietThua() {
                     <Text className="text-caption text-ink font-semibold ml-1 flex-1">
                       {lm.nhan}
                     </Text>
+                    {soVt > 0 ? (
+                      <View className="flex-row items-center mr-2">
+                        <Ionicons name="cube-outline" size={12} color="#6b7280" />
+                        <Text className="text-small text-ink-muted ml-0.5">{soVt}</Text>
+                      </View>
+                    ) : null}
+                    {soAnh > 0 ? (
+                      <View className="flex-row items-center mr-2">
+                        <Ionicons name="camera-outline" size={12} color="#6b7280" />
+                        <Text className="text-small text-ink-muted ml-0.5">{soAnh}</Text>
+                      </View>
+                    ) : null}
                     <Text className="text-small text-ink-muted">{formatDateTime(n.taoLuc)}</Text>
                   </View>
                   {n.moTa ? (
@@ -485,6 +611,70 @@ export default function ChiTietThua() {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Tạo nhanh lịch cây — chọn mẫu (clone lịch có sẵn / bắt đầu tối thiểu),
+          hoặc "Tự dựng chi tiết" mở editor đầy đủ. */}
+      <MauLichSheet
+        visible={mauMo}
+        onClose={() => setMauMo(false)}
+        dsLich={dsLich}
+        dangLuu={taoNhanh.isPending}
+        onChon={(mau) => taoNhanh.mutate(mau)}
+        onTuDung={() => {
+          setMauMo(false);
+          router.push({
+            pathname: '/thua/lich-cay/[cayId]',
+            params: { cayId: slugCay(thua.cropName ?? ''), tenGoiY: thua.cropName ?? '' },
+          } as never);
+        }}
+      />
     </SafeAreaView>
+  );
+}
+
+const TRANG_THAI_LUA_META: Record<
+  LuaThua['trangThai'],
+  { nhan: string; accent: keyof typeof ACCENT }
+> = {
+  sap_toi: { nhan: 'Sắp tới', accent: 'xam' },
+  cho_xac_nhan: { nhan: 'Chờ xác nhận', accent: 'ho-phach' },
+  da_thu: { nhan: 'Đã thu', accent: 'xanh-la' },
+};
+
+function LuaRow({ lua, onPress }: { lua: LuaThua; onPress: () => void }) {
+  const meta = TRANG_THAI_LUA_META[lua.trangThai];
+  const a = ACCENT[meta.accent];
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Mở ${lua.nhan}`}
+      className="flex-row items-center py-2 border-b border-border active:bg-bg-soft"
+    >
+      <View className="flex-1 pr-2">
+        <View className="flex-row items-center">
+          <Text className="text-body text-ink font-semibold">
+            {lua.lua ? `Lứa ${lua.lua}` : lua.nhan}
+          </Text>
+          <View className={`ml-2 rounded-input px-2 py-0.5 ${a.bg} ${a.border} border`}>
+            <Text className={`text-small font-semibold ${a.text}`}>{meta.nhan}</Text>
+          </View>
+        </View>
+        <Text className="text-small text-ink-muted mt-0.5" numberOfLines={1}>
+          Dự kiến {formatDate(lua.ngayDuKien)}
+          {lua.ngayThucTe ? ` → thực tế ${formatDate(lua.ngayThucTe)}` : ''}
+        </Text>
+      </View>
+      <View className="items-end">
+        <Text className="text-body text-ink font-semibold">
+          {lua.sanLuongCongDon > 0
+            ? `${lua.sanLuongCongDon.toLocaleString('vi-VN')} kg`
+            : '—'}
+        </Text>
+        {lua.soNhatKy > 0 ? (
+          <Text className="text-small text-ink-muted">{lua.soNhatKy} bản ghi</Text>
+        ) : null}
+      </View>
+    </Pressable>
   );
 }

@@ -58,12 +58,39 @@ export interface VatTu {
 
 // ============ Kho + sổ cái ============
 
-export type KhoLoai = 'tong' | 'tram';
+export type KhoLoai = 'tong' | 'tram' | 'xe';
+
+/** Loại phương tiện của kho tạm (xe). Kho tạm = xe chở hàng của shipper —
+ *  hàng đã rời kho nguồn nhưng chưa giao tới kho khác (in-transit). */
+export type LoaiXe = 'xe_may' | 'xe_tai';
 
 export interface Kho {
   id: string;
   ten: string;
   loai: KhoLoai;
+  /** Loại xe (chỉ có nghĩa khi `loai='xe'`). BE thật cần cột `vehicle_kind`. */
+  loaiXe?: LoaiXe;
+  /** Người phụ trách kho xe. BE ép NON-NULL khi `loai='xe'` (DB CHECK
+   *  `warehouse_xe_custodian_check`). Mobile lọc "xe của tôi" bằng field này. */
+  custodianUserId?: string;
+  /** Tên custodian — BE trả từ JOIN users (tránh mobile phải fetch lại). */
+  custodianName?: string;
+  /** Trạng thái kho ('active'/'ngung'…). BE có, mobile tuỳ ý hiển thị. */
+  trangThai?: string;
+  /** True = kho tạm khai offline, CHƯA đồng bộ BE (mới có id tạm 'LOCAL-KHO-…').
+   *  Display-only ở client (badge "chưa đồng bộ"); KHÔNG gửi field này lên BE. */
+  dongBoTam?: boolean;
+}
+
+/** Body tạo kho tạm (kho xe) từ app. `loai:'xe'` set ở tầng API, không nhận từ UI. */
+export interface TaoKhoTamBody {
+  ten: string;
+  /** Xe máy / xe tải — KTV chọn khi tạo. */
+  loaiXe: LoaiXe;
+  /** Custodian = chính KTV đang đăng nhập (DB CHECK ép non-null khi loai='xe'). */
+  custodianUserId: string;
+  /** Tên custodian để hiển thị ngay (mock set; BE thật JOIN users tự trả). */
+  custodianName?: string;
 }
 
 /**
@@ -164,6 +191,23 @@ interface PhieuBaseCommon {
   viTri?: ViTri;
 }
 
+// ============ Thanh toán (mock-first — backend K4 lớp TIỀN chưa có) ============
+
+/** Trạng thái thanh toán — DERIVE từ daThu/tongTien, KHÔNG lưu để tránh lệch. */
+export type TrangThaiThanhToan = 'da_tt' | 'mot_phan' | 'ghi_no';
+
+export type PhuongThucTT = 'tien_mat' | 'chuyen_khoan';
+
+/** Một lần thu tiền. `soTien` âm = hoàn tiền (từ phiếu trả hàng). */
+export interface LanThu {
+  id: string;
+  soTien: number;
+  phuongThuc: PhuongThucTT;
+  ghiChu?: string;
+  nguoiThu: string;
+  thuLuc: string;
+}
+
 export interface PhieuNhap extends PhieuBaseCommon {
   kind: 'nhap';
   /** Tên NCC snapshot (in phiếu, thống kê không cần join). */
@@ -188,10 +232,19 @@ export interface PhieuBan extends PhieuBaseCommon {
   kind: 'ban';
   partyId?: string;
   partyName?: string;
-  /** Loại đối tác — mobile luôn gửi 'household'. */
+  /** Loại đối tác: 'household' | 'cooperative' (có hồ sơ) | 'khach_le' (vãng lai). */
   partyKind?: string;
+  /** Khách vãng lai — tên/SĐT tuỳ chọn, không gắn hồ sơ (partyKind='khach_le'). */
+  khachLe?: { ten?: string; sdt?: string };
   /** Giảm giá tổng phiếu (backend hỗ trợ cho cả nhập lẫn bán). */
   giamGia?: number;
+  // ─ Thanh toán (mock-first). `daThu` undefined = phiếu cũ chưa có lớp TIỀN;
+  //   MỌI chỗ đọc phải guard `daThu != null`, KHÔNG coi undefined là ghi nợ.
+  /** Tổng đã thu (trừ đi các lần hoàn từ phiếu trả). */
+  daThu?: number;
+  lanThu?: LanThu[];
+  /** Tổng giá trị hàng khách đã trả lại (phiếu khach_tra). Optional. */
+  daTra?: number;
   dongHang: DongHangNhapLieu[];
 }
 
@@ -236,13 +289,17 @@ export interface DraftLine {
 }
 
 /**
- * Đối tác đang chọn trong wizard. Với bán (`nongHo`), `id` LUÔN phải có — khách
- * hàng bắt buộc gắn hồ sơ (xem `PhieuBan`). Nhánh `khachLe` đã bỏ 2026-08-19.
+ * Đối tác đang chọn trong wizard.
+ *  - `ncc`: nhà cung cấp (nhập kho).
+ *  - `nongHo` / `htx`: khách có hồ sơ (`id` BẮT BUỘC) → partyKind household/cooperative.
+ *  - `khachLe`: khách vãng lai, không hồ sơ — chỉ tên/SĐT tuỳ chọn (PII, không persist).
  */
 export interface PartnerDraft {
   id?: string;
   ten?: string;
-  kind: 'ncc' | 'nongHo';
+  /** SĐT khách lẻ — PII, KHÔNG persist (partner bị loại khỏi partialize). */
+  sdt?: string;
+  kind: 'ncc' | 'nongHo' | 'khachLe' | 'htx';
 }
 
 /** Body tạo phiếu nhập/bán. */
@@ -253,12 +310,15 @@ export interface CreateReceiptBody {
   nccId?: string;
   expectedOn?: string;
   soHoaDon?: string;
-  // Bán — khách hàng BẮT BUỘC (backend 400 `thieu_khach_hang` nếu thiếu partyId).
+  // Bán — khách có hồ sơ (household/cooperative) yêu cầu partyId; khach_le miễn.
   partyId?: string;
   partyName?: string;
   partyKind?: string;
+  khachLe?: { ten?: string; sdt?: string };
   // Chung — `giamGia` backend nhận cho CẢ nhập lẫn bán.
   giamGia?: number;
+  /** Thanh toán ngay khi tạo phiếu bán (mock-first). soTien 0 = ghi nợ toàn bộ. */
+  thanhToan?: { soTien: number; phuongThuc: PhuongThucTT };
   ghiChu?: string;
   anh: string[];
   dongHang: DongHangNhapLieu[];
@@ -309,4 +369,106 @@ export interface TonKhoRow {
   khoId: string;
   vatTuId: string;
   soLuong: number;
+}
+
+// ============ K2 · Phiếu chuyển kho 2 pha ============
+// Contract lấy trực tiếp từ nag_erp_api/src/modules/kho/service.js §K2
+// (HEAD a5ba961 · 25 test BE + 10 E2E pg). Vòng đời:
+//   ke_hoach → dang_chuyen → ghi | cho_duyet_lech → ghi
+//                  ↓
+//                 huy (chỉ khi còn ke_hoach; đã dang_chuyen phải đi
+//                      /kho/phieu/:id/huy chung — BE chưa mở nhánh CK-)
+
+export type PhieuChuyenTrangThai =
+  | 'ke_hoach'
+  | 'dang_chuyen'
+  | 'cho_duyet_lech'
+  | 'ghi'
+  | 'huy';
+
+/** Chênh lệch nhận-xuất PER SKU (đã quy đổi về đơn vị cơ sở). Dương = thừa
+ *  (BE chặn cứng, không bao giờ ghi được), âm = thiếu (hao hụt). */
+export interface PhieuChuyenVariance {
+  vatTuId: string;
+  /** thucNhan − daXuat, đơn vị cơ sở của SKU. */
+  soLuongLech: number;
+}
+
+export interface PhieuChuyen {
+  id: string;
+  khoNguonId: string;
+  khoDichId: string;
+  trangThai: PhieuChuyenTrangThai;
+  /** Snapshot dòng hàng lúc lập lệnh (chưa quy đổi). Đọc để hiển thị. */
+  dongHang: DongHangNhapLieu[];
+  /** Snapshot thực nhận (chỉ có sau khi xacNhanNhan). */
+  dongHangThucNhan?: DongHangNhapLieu[];
+  variance?: PhieuChuyenVariance[];
+  ghiChu?: string;
+  anh: string[];
+  viTri?: ViTri;
+  nguoiTao: string;
+  taoLuc: string;
+  nguoiXuat?: string;
+  xuatLuc?: string;
+  nguoiNhan?: string;
+  nhanLuc?: string;
+  nguoiDuyetLech?: string;
+  duyetLechLuc?: string;
+  lyDoDuyetLech?: string;
+  huyBoi?: string;
+  huyLuc?: string;
+  lyDoHuy?: string;
+}
+
+/** Body POST /kho/phieu-chuyen/ke-hoach. BE yêu cầu khoNguonId + khoDichId
+ *  (khác nhau); dongHang optional cho lập lệnh trống, nhưng xuất buộc phải có. */
+export interface CreatePhieuChuyenKeHoachBody {
+  khoNguonId: string;
+  khoDichId: string;
+  dongHang?: DongHangNhapLieu[];
+  ghiChu?: string;
+  anh?: string[];
+  viTri?: ViTri;
+}
+
+/** Body POST /kho/phieu-chuyen/:id/xac-nhan-nhan. Bỏ trống = nhận đúng dự kiến. */
+export interface XacNhanNhanBody {
+  dongHangThucNhan?: DongHangNhapLieu[];
+}
+
+// ============ Phiếu khách trả (khach_tra) — mock-first, BE chưa có ============
+// Tham chiếu phiếu bán gốc, nhập hàng lại kho (moves huong='in'), hoàn tiền /
+// trừ nợ. KHÔNG nằm trong PhieuHeader union (tránh đụng mọi switch phiếu hiện có).
+
+export interface PhieuTra {
+  id: string;
+  /** Phiếu bán gốc (BH-...) mà phiếu này trả hàng về. */
+  phieuGocId: string;
+  khoId: string;
+  khoTen?: string;
+  trangThai: 'ghi' | 'huy';
+  lyDo: string;
+  /** Dòng hàng trả (snapshot, donGia copy từ dòng gốc). */
+  dongHang: DongHangNhapLieu[];
+  /** Tổng giá trị hàng trả (Σ donGia × base). */
+  giaTri: number;
+  /** Phần trừ vào công nợ còn lại của phiếu gốc. */
+  giamNo: number;
+  /** Tiền thực hoàn khách (giaTri − giamNo). */
+  hoanTien: number;
+  phuongThucHoan?: PhuongThucTT;
+  anh: string[];
+  viTri?: ViTri;
+  nguoiTao: string;
+  taoLuc: string;
+}
+
+export interface CreatePhieuTraBody {
+  phieuGocId: string;
+  dongHang: DongHangNhapLieu[];
+  lyDo: string;
+  phuongThucHoan?: PhuongThucTT;
+  anh?: string[];
+  viTri?: ViTri;
 }

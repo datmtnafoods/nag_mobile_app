@@ -7,6 +7,14 @@ import { useAuthStore } from './store';
 import { useCartStore, CART_STORAGE_KEY } from '../stores/cart';
 import { useReceiptDraftStore, RECEIPT_DRAFT_KEY } from '../stores/receipt-draft';
 import { useKiemDraftStore, KIEM_DRAFT_KEY } from '../stores/kiem-draft';
+import {
+  usePhieuChuyenDraftStore,
+  PHIEU_CHUYEN_DRAFT_KEY,
+} from '../stores/phieu-chuyen-draft';
+import { useInboxDraftStore } from '../stores/inbox-draft';
+import { useHiddenHubStore, HIDDEN_HUB_KEY } from '../stores/hidden-hub';
+import { usePartyQueueStore, PARTY_QUEUE_KEY } from '../stores/party-queue';
+import { useKhoTamQueueStore, KHO_TAM_QUEUE_KEY } from '../stores/kho-tam-queue';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 let unauthorizedInFlight = false;
@@ -32,10 +40,20 @@ export function wireApiAuth() {
           useCartStore.getState().reset();
           useReceiptDraftStore.getState().reset();
           useKiemDraftStore.getState().reset();
+          usePhieuChuyenDraftStore.getState().reset();
+          // Nháp inbox RAM-only (không AsyncStorage) — chỉ cần reset, không removeItem.
+          useInboxDraftStore.getState().reset();
+          useHiddenHubStore.getState().reset();
+          usePartyQueueStore.getState().reset();
+          useKhoTamQueueStore.getState().reset();
           await Promise.all([
             AsyncStorage.removeItem(CART_STORAGE_KEY),
             AsyncStorage.removeItem(RECEIPT_DRAFT_KEY),
             AsyncStorage.removeItem(KIEM_DRAFT_KEY),
+            AsyncStorage.removeItem(PHIEU_CHUYEN_DRAFT_KEY),
+            AsyncStorage.removeItem(HIDDEN_HUB_KEY),
+            AsyncStorage.removeItem(PARTY_QUEUE_KEY),
+            AsyncStorage.removeItem(KHO_TAM_QUEUE_KEY),
           ]);
           queryClient.clear();
           if (wasLoggedIn && code === 'token_expired') {

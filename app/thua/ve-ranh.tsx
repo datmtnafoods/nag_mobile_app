@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -47,6 +47,7 @@ function Fab({
 }
 
 export default function VeRanh() {
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ lat?: string; lng?: string; plotId?: string }>();
   const lat0 = Number(params.lat) || 0;
   const lng0 = Number(params.lng) || 0;
@@ -173,10 +174,13 @@ export default function VeRanh() {
         onMapError={setMapLoi}
       />
 
-      {/* Lớp điều khiển nổi — box-none để bản đồ vẫn nhận cử chỉ ở vùng trống */}
-      <SafeAreaView style={StyleSheet.absoluteFill} pointerEvents="box-none" edges={['top', 'bottom']}>
+      {/* Lớp điều khiển nổi — box-none để bản đồ vẫn nhận cử chỉ ở vùng trống.
+          Dùng View + useSafeAreaInsets thay SafeAreaView: trong fullScreenModal
+          (app/thua/_layout.tsx) inset của SafeAreaView không ổn định trên Android
+          edge-to-edge → X bị status bar đè. */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
         {/* Trên: đóng + gợi ý */}
-        <View style={styles.topRow} pointerEvents="box-none">
+        <View style={[styles.topRow, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
           <Pressable
             onPress={() => router.back()}
             accessibilityRole="button"
@@ -211,7 +215,7 @@ export default function VeRanh() {
         </View>
 
         {/* Dưới: số đo + Huỷ/Xong */}
-        <View style={styles.bottom} pointerEvents="box-none">
+        <View style={[styles.bottom, { paddingBottom: insets.bottom + 12 }]} pointerEvents="box-none">
           <View style={[styles.pill, xoan && styles.pillXoan]} pointerEvents="none">
             {xoan ? (
               <Text style={styles.pillXoanText}>Ranh bị xoắn — kéo lại đỉnh cho hết cắt chéo</Text>
@@ -256,7 +260,7 @@ export default function VeRanh() {
             </View>
           </View>
         </View>
-      </SafeAreaView>
+      </View>
 
       {/* Lỗi bản đồ → thử lại hoặc khai nhanh */}
       {mapLoi ? (

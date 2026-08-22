@@ -1,12 +1,26 @@
 import { useMemo, useState } from 'react';
-import { View, Text, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { Input } from '../../src/components/Input';
 import { Button } from '../../src/components/Button';
+import { EmptyState } from '../../src/components/EmptyState';
+import { ErrorState } from '../../src/components/ErrorState';
 import { apiErrorMessage } from '../../src/api/client';
+import { listParties } from '../../src/api/erp/parties';
+import { useDebouncedValue } from '../../src/hooks/useDebouncedValue';
 import { useReceiptDraftStore } from '../../src/stores/receipt-draft';
 import {
   ChonNongHo,
@@ -15,7 +29,7 @@ import {
   type KetQuaChonHo,
 } from '../../src/features/den-thua/components/ChonNongHo';
 
-type Kind = 'ncc' | 'nongHo';
+type Kind = 'ncc' | 'nongHo' | 'htx';
 
 /**
  * Chọn đối tác cho phiếu vật tư.
@@ -24,19 +38,28 @@ type Kind = 'ncc' | 'nongHo';
  *   chuỗi, chưa có sổ NCC dùng chung.
  * - `kind=nongHo` (bán hàng): BẮT BUỘC gắn hồ sơ nông hộ thật. Tái dùng
  *   `ChonNongHo` (chọn hộ có sẵn / tạo hộ mới, quét CCCD) — cùng component với
- *   luồng tạo thửa. "Khách lẻ" đã BỎ 2026-08-19 theo backend
- *   (`kho/service.js` ném 400 `thieu_khach_hang` nếu thiếu partyId).
+ *   luồng tạo thửa.
+ * - `kind=htx` (bán sỉ): chọn hồ sơ HTX (partyKind 'cooperative') — list đơn
+ *   giản + tìm kiếm, KHÔNG dùng ChonNongHo (đó là luồng hộ + CCCD).
  */
 export default function PartnerPicker() {
   const { kind: kindParam } = useLocalSearchParams<{ kind?: string }>();
-  const kind: Kind = kindParam === 'ncc' ? 'ncc' : 'nongHo';
+  const kind: Kind = kindParam === 'ncc' ? 'ncc' : kindParam === 'htx' ? 'htx' : 'nongHo';
   const isNCC = kind === 'ncc';
+  const isHTX = kind === 'htx';
 
   const setPartner = useReceiptDraftStore((s) => s.setPartner);
   const qc = useQueryClient();
 
   const [manualName, setManualName] = useState('');
   const [kq, setKq] = useState<KetQuaChonHo>({ loai: 'chon', party: null });
+  const [htxQ, setHtxQ] = useState('');
+  const htxQDebounced = useDebouncedValue(htxQ, 300);
+  const htxQuery = useQuery({
+    queryKey: ['parties', 'htx', htxQDebounced],
+    queryFn: () => listParties({ kind: 'cooperative', q: htxQDebounced }),
+    enabled: isHTX,
+  });
 
   const manualValid = useMemo(() => manualName.trim().length >= 2, [manualName]);
 
@@ -65,6 +88,75 @@ export default function PartnerPicker() {
     },
     onError: (err) => Alert.alert('Chưa lưu được', apiErrorMessage(err)),
   });
+
+  if (isHTX) {
+    return (
+      <SafeAreaView className="flex-1 bg-bg-soft" edges={['bottom']}>
+        <Stack.Screen options={{ title: 'Chọn HTX' }} />
+        <View className="px-4 pt-3">
+          <Input
+            placeholder="Tìm HTX theo tên / SĐT..."
+            leftIcon="search-outline"
+            value={htxQ}
+            onChangeText={setHtxQ}
+            autoCapitalize="none"
+          />
+        </View>
+        {htxQuery.isPending ? (
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator color="#dd1c2e" />
+          </View>
+        ) : htxQuery.isError ? (
+          <ErrorState
+            message={apiErrorMessage(htxQuery.error)}
+            onRetry={() => void htxQuery.refetch()}
+          />
+        ) : (
+          <FlatList
+            data={htxQuery.data ?? []}
+            keyExtractor={(p) => p.id}
+            contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+            renderItem={({ item }) => (
+              <Pressable
+                onPress={() => {
+                  setPartner({ id: item.id, ten: item.name, kind: 'htx' });
+                  router.back();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Chọn ${item.name}`}
+                className="rounded-card bg-white border border-border p-3 mb-2 flex-row items-center active:bg-bg-soft"
+              >
+                <View className="h-10 w-10 rounded-input bg-green-100 items-center justify-center mr-3">
+                  <Ionicons name="people-outline" size={20} color="#166534" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-body text-ink font-semibold" numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  {item.phones[0] ? (
+                    <Text className="text-caption text-ink-muted">{item.phones[0]}</Text>
+                  ) : null}
+                  {item.address ? (
+                    <Text className="text-small text-ink-muted" numberOfLines={1}>
+                      {item.address}
+                    </Text>
+                  ) : null}
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+              </Pressable>
+            )}
+            ListEmptyComponent={
+              <EmptyState
+                icon="people-outline"
+                title="Không tìm thấy HTX"
+                message="Thử đổi từ khoá tìm kiếm."
+              />
+            }
+          />
+        )}
+      </SafeAreaView>
+    );
+  }
 
   if (isNCC) {
     return (

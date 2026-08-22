@@ -1,14 +1,18 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, Image, Pressable } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, Image, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { getMoves, getReceipt, huyPhieu } from '../../../src/api/erp/warehouse';
+import { thuTien } from '../../../src/api/erp/thanh-toan';
+import { listPhieuTra } from '../../../src/api/erp/phieu-tra';
+import { guiTinNhan, taoHoacLayHoiThoai } from '../../../src/api/erp/inbox';
+import { permsForInbox } from '../../../src/features/inbox/perms';
 import { getParty } from '../../../src/api/erp/parties';
 import { apiErrorMessage } from '../../../src/api/client';
 import { usePermissions } from '../../../src/auth/store';
-import { canCancelReceipt, permsForVatTu } from '../../../src/features/vat-tu/perms';
+import { canCancelReceipt, canCreateReceipt, permsForVatTu } from '../../../src/features/vat-tu/perms';
 import {
   formatDate,
   formatDateTime,
@@ -17,8 +21,16 @@ import {
   RECEIPT_STATUS_META,
   statusLabelForKind,
 } from '../../../src/features/vat-tu/format';
+import {
+  conNo as calcConNo,
+  deriveTrangThaiTT,
+  PHUONG_THUC_LABEL,
+  TT_META,
+  tongTienHieuLuc,
+} from '../../../src/features/vat-tu/payment';
 import { KindBadge } from '../../../src/features/vat-tu/components/KindBadge';
 import { TheKhoRow } from '../../../src/features/vat-tu/components/TheKhoRow';
+import { ThuTienSheet } from '../../../src/features/vat-tu/components/ThuTienSheet';
 import { ViTriRow } from '../../../src/features/location/components/ViTriRow';
 import { Button } from '../../../src/components/Button';
 import { CancelSheet } from '../../../src/components/CancelSheet';
@@ -30,8 +42,11 @@ export default function PhieuBanDetail() {
   const permissions = usePermissions();
   const perms = permsForVatTu(permissions);
   const canCancel = canCancelReceipt(perms);
+  const canThu = canCreateReceipt(perms, 'ban');
+  const inboxPerms = permsForInbox(permissions);
   const qc = useQueryClient();
   const [showCancel, setShowCancel] = useState(false);
+  const [showThu, setShowThu] = useState(false);
 
   const q = useQuery({
     queryKey: ['receipt', receiptId],
@@ -48,10 +63,18 @@ export default function PhieuBanDetail() {
   // Khai TRƯỚC các early-return bên dưới để thứ tự hook không đổi giữa các render.
   const phieuBan = q.data?.phieu.kind === 'ban' ? q.data.phieu : undefined;
   const partyId = phieuBan?.partyId;
+
   const partyQuery = useQuery({
     queryKey: ['party', partyId],
     queryFn: () => getParty(partyId!),
     enabled: Boolean(partyId),
+  });
+
+  // Phiếu khách trả liên quan (đổi/trả một phần).
+  const traQuery = useQuery({
+    queryKey: ['phieu-tra', { phieuGocId: receiptId }],
+    queryFn: () => listPhieuTra({ phieuGocId: receiptId }),
+    enabled: !!receiptId,
   });
 
   const cancelMut = useMutation({
@@ -64,6 +87,46 @@ export default function PhieuBanDetail() {
       qc.invalidateQueries({ queryKey: ['moves'] });
       setShowCancel(false);
     },
+  });
+
+  const thuMut = useMutation({
+    mutationFn: (input: Parameters<typeof thuTien>[1]) => thuTien(receiptId, input),
+    onSuccess: (updated) => {
+      qc.setQueryData(['receipt', receiptId], updated);
+      qc.invalidateQueries({ queryKey: ['receipts'] });
+      setShowThu(false);
+    },
+  });
+
+  // Mở (hoặc tạo) hội thoại với khách của phiếu này.
+  const openInbox = useMutation({
+    mutationFn: async (args: { nhacNo?: { con: number } }) => {
+      const p = phieuBan;
+      if (!p?.partyId) throw new Error('Khách lẻ không có hội thoại.');
+      const kind = p.partyKind === 'cooperative' ? 'htx' : 'nongHo';
+      const ht = await taoHoacLayHoiThoai(p.partyId, p.partyName ?? 'Khách', kind);
+      if (args.nhacNo) {
+        await guiTinNhan(ht.id, {
+          loai: 'nhac_no',
+          noiDung: `Phiếu ${p.id} còn nợ ${Math.round(args.nhacNo.con).toLocaleString('vi-VN')} đ. Anh/chị thu xếp giúp nhé.`,
+          phieuId: p.id,
+          phieu: {
+            phieuId: p.id,
+            soTien: tongTienHieuLuc(p),
+            conNo: args.nhacNo.con,
+            ngay: p.taoLuc,
+            soMatHang: p.dongHang.length,
+            tenHangDau: p.dongHang[0]?.tenSkuSnapshot,
+          },
+        });
+      }
+      return ht.id;
+    },
+    onSuccess: (htId) => {
+      qc.invalidateQueries({ queryKey: ['inbox'] });
+      router.push(`/inbox/${htId}` as never);
+    },
+    onError: (err) => Alert.alert('Chưa mở được', apiErrorMessage(err)),
   });
 
   if (q.isPending) {
@@ -88,8 +151,8 @@ export default function PhieuBanDetail() {
   }
 
   const phieu = q.data.phieu as PhieuBan;
-  const dongHang = q.data.dongHang;
-  const statusMeta = RECEIPT_STATUS_META[phieu.trangThai];
+  const dongHang = q.data.dongHang ?? [];
+  const statusMeta = RECEIPT_STATUS_META[phieu.trangThai] ?? { bg: 'bg-neutral-100', text: 'text-ink-muted' };
   const statusLabel = statusLabelForKind(phieu.trangThai, 'ban');
   const isHuy = phieu.trangThai === 'huy';
 
@@ -135,21 +198,40 @@ export default function PhieuBanDetail() {
 
         <View className="rounded-card bg-white border border-border p-4 mb-4">
           <View className="flex-row items-center mb-2">
-            <Ionicons name="person-outline" size={18} color="#6b7280" />
-            <Text className="text-caption text-ink-muted ml-2">Khách hàng</Text>
+            <Ionicons
+              name={
+                phieu.partyKind === 'cooperative'
+                  ? 'people-outline'
+                  : phieu.partyKind === 'khach_le'
+                    ? 'walk-outline'
+                    : 'person-outline'
+              }
+              size={18}
+              color="#6b7280"
+            />
+            <Text className="text-caption text-ink-muted ml-2">
+              {phieu.partyKind === 'cooperative'
+                ? 'HTX'
+                : phieu.partyKind === 'khach_le'
+                  ? 'Khách lẻ'
+                  : 'Khách hàng'}
+            </Text>
           </View>
           <Text className="text-body text-ink font-semibold">
-            {partyQuery.data?.name ?? phieu.partyName ?? 'Chưa rõ'}
+            {partyQuery.data?.name ?? phieu.partyName ?? phieu.khachLe?.ten ?? 'Khách lẻ'}
           </Text>
-          {partyQuery.data?.phones[0] ? (
-            <Text className="text-caption text-ink-muted">{partyQuery.data.phones[0]}</Text>
+          {/* SĐT: từ hồ sơ (nông hộ/HTX) hoặc từ khách lẻ nhập tay. */}
+          {partyQuery.data?.phones[0] ?? phieu.khachLe?.sdt ? (
+            <Text className="text-caption text-ink-muted">
+              {partyQuery.data?.phones[0] ?? phieu.khachLe?.sdt}
+            </Text>
           ) : null}
           {partyQuery.data?.address ?? partyQuery.data?.commune ? (
             <Text className="text-small text-ink-muted mt-0.5">
               {partyQuery.data?.address ?? partyQuery.data?.commune}
             </Text>
           ) : null}
-          {phieu.partyId ? (
+          {phieu.partyId && phieu.partyKind !== 'cooperative' ? (
             <Pressable
               onPress={() => router.push(`/nong-ho/${phieu.partyId}` as never)}
               accessibilityRole="button"
@@ -160,10 +242,10 @@ export default function PhieuBanDetail() {
               <Text className="text-caption text-primary font-semibold">Xem hồ sơ</Text>
               <Ionicons name="chevron-forward" size={14} color="#dd1c2e" />
             </Pressable>
-          ) : (
-            // Phiếu tạo trước 2026-08-19 (thời "khách lẻ") — không có hồ sơ để mở.
+          ) : !phieu.partyId && phieu.partyKind !== 'khach_le' ? (
+            // Phiếu tạo trước 2026-08-19 (thời "khách lẻ" cũ) — không có hồ sơ.
             <Text className="text-small text-ink-muted mt-1">Phiếu cũ · chưa gắn hồ sơ</Text>
-          )}
+          ) : null}
           {phieu.viTri ? (
             <View className="mt-2 pt-2 border-t border-border">
               <ViTriRow viTri={phieu.viTri} nhan={`Phiếu bán ${phieu.id}`} />
@@ -241,6 +323,124 @@ export default function PhieuBanDetail() {
           </View>
         </View>
 
+        {/* Thanh toán — chỉ hiện với phiếu đã có lớp TIỀN (daThu != null). */}
+        {!isHuy && phieu.daThu != null ? (
+          (() => {
+            const phaiThu = tongTienHieuLuc(phieu);
+            const daThu = phieu.daThu ?? 0;
+            const con = calcConNo(phieu);
+            const ttStatus = deriveTrangThaiTT(daThu, phaiThu);
+            return (
+              <View className="rounded-card bg-white border border-border p-4 mt-4">
+                <View className="flex-row items-center justify-between mb-2">
+                  <View className="flex-row items-center">
+                    <Ionicons name="wallet-outline" size={18} color="#6b7280" />
+                    <Text className="text-caption text-ink-muted ml-2">Thanh toán</Text>
+                  </View>
+                  <View className={`rounded-input px-2 py-1 ${TT_META[ttStatus].bg}`}>
+                    <Text className={`text-caption font-semibold ${TT_META[ttStatus].text}`}>
+                      {TT_META[ttStatus].label}
+                    </Text>
+                  </View>
+                </View>
+                <View className="flex-row justify-between">
+                  <Text className="text-caption text-ink-muted">Đã thu</Text>
+                  <Text className="text-caption text-ink font-semibold">{formatVND(daThu)}</Text>
+                </View>
+                {phieu.daTra ? (
+                  <View className="flex-row justify-between mt-0.5">
+                    <Text className="text-caption text-ink-muted">Hàng trả</Text>
+                    <Text className="text-caption text-ink">− {formatVND(phieu.daTra)}</Text>
+                  </View>
+                ) : null}
+                {con > 0 ? (
+                  <View className="flex-row justify-between mt-0.5">
+                    <Text className="text-caption text-ink-muted">Còn nợ</Text>
+                    <Text className="text-caption text-red-600 font-semibold">{formatVND(con)}</Text>
+                  </View>
+                ) : null}
+                {phieu.lanThu && phieu.lanThu.length > 0 ? (
+                  <View className="mt-2 pt-2 border-t border-border">
+                    {phieu.lanThu.map((lt) => {
+                      const hoan = lt.soTien < 0;
+                      return (
+                        <View key={lt.id} className="flex-row justify-between py-0.5">
+                          <Text className="text-small text-ink-muted">
+                            {formatDateTime(lt.thuLuc)} · {PHUONG_THUC_LABEL[lt.phuongThuc]}
+                          </Text>
+                          <Text
+                            className={`text-small font-semibold ${hoan ? 'text-red-600' : 'text-ink'}`}
+                          >
+                            {hoan ? `Hoàn ${formatVND(-lt.soTien)}` : formatVND(lt.soTien)}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : null}
+                {con > 0 ? (
+                  <View className="flex-row gap-2 mt-3">
+                    {canThu ? (
+                      <Pressable
+                        onPress={() => {
+                          thuMut.reset();
+                          setShowThu(true);
+                        }}
+                        className="flex-1 min-h-[44px] rounded-input border border-primary items-center justify-center flex-row"
+                        accessibilityRole="button"
+                        accessibilityLabel="Thu thêm tiền"
+                      >
+                        <Ionicons name="add-circle-outline" size={16} color="#dd1c2e" />
+                        <Text className="text-caption text-primary font-semibold ml-1">Thu thêm</Text>
+                      </Pressable>
+                    ) : null}
+                    {inboxPerms.canSend && phieu.partyId ? (
+                      <Pressable
+                        onPress={() => openInbox.mutate({ nhacNo: { con } })}
+                        disabled={openInbox.isPending}
+                        className="flex-1 min-h-[44px] rounded-input border border-amber-500 items-center justify-center flex-row"
+                        accessibilityRole="button"
+                        accessibilityLabel="Nhắc nợ qua tin nhắn"
+                      >
+                        <Ionicons name="notifications-outline" size={16} color="#b45309" />
+                        <Text className="text-caption text-amber-700 font-semibold ml-1">Nhắc nợ</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })()
+        ) : null}
+
+        {traQuery.data && traQuery.data.length > 0 ? (
+          <View className="rounded-card bg-white border border-border p-4 mt-4">
+            <Text className="text-caption text-ink-muted mb-2">
+              Đổi trả ({traQuery.data.length})
+            </Text>
+            {traQuery.data.map((pt) => (
+              <Pressable
+                key={pt.id}
+                onPress={() => router.push(`/vat-tu/doi-tra/${pt.id}` as never)}
+                className="flex-row items-center justify-between py-2 min-h-[44px]"
+                accessibilityRole="button"
+                accessibilityLabel={`Mở phiếu trả ${pt.id}`}
+              >
+                <View className="flex-1 pr-2">
+                  <Text className="text-caption text-ink font-semibold">{pt.id}</Text>
+                  <Text className="text-small text-ink-muted" numberOfLines={1}>
+                    {formatDateTime(pt.taoLuc)} · {pt.lyDo}
+                  </Text>
+                </View>
+                <Text className="text-caption text-primary font-semibold">
+                  − {formatVND(pt.giaTri)}
+                </Text>
+                <Ionicons name="chevron-forward" size={14} color="#9ca3af" style={{ marginLeft: 4 }} />
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
         {phieu.ghiChu ? (
           <View className="rounded-card bg-white border border-border p-4 mt-4">
             <Text className="text-caption text-ink-muted">Ghi chú</Text>
@@ -263,18 +463,65 @@ export default function PhieuBanDetail() {
         ) : null}
       </ScrollView>
 
-      {canCancel && phieu.trangThai === 'ghi' ? (
-        <View className="px-4 pb-4 pt-2 border-t border-border bg-bg">
-          <Button
-            label="Huỷ phiếu bán"
-            variant="secondary"
-            onPress={() => {
-              cancelMut.reset();
-              setShowCancel(true);
-            }}
-          />
+      {phieu.trangThai === 'ghi' ? (
+        <View className="px-4 pb-4 pt-2 border-t border-border bg-bg gap-y-2">
+          <View className="flex-row gap-2">
+            <View className="flex-1">
+              <Button
+                label="Xem hoá đơn"
+                onPress={() => router.push(`/vat-tu/ban-hang/hoa-don/${phieu.id}` as never)}
+              />
+            </View>
+            {inboxPerms.canSend && phieu.partyId ? (
+              <View className="flex-1">
+                <Button
+                  label="Nhắn tin"
+                  variant="secondary"
+                  loading={openInbox.isPending}
+                  onPress={() => openInbox.mutate({})}
+                />
+              </View>
+            ) : null}
+          </View>
+          <View className="flex-row gap-2">
+            {canThu ? (
+              <View className="flex-1">
+                <Button
+                  label="Đổi trả"
+                  variant="secondary"
+                  onPress={() =>
+                    router.push(`/vat-tu/doi-tra/new?phieuGocId=${phieu.id}` as never)
+                  }
+                />
+              </View>
+            ) : null}
+            {canCancel ? (
+              <View className="flex-1">
+                <Button
+                  label="Huỷ phiếu"
+                  variant="secondary"
+                  onPress={() => {
+                    cancelMut.reset();
+                    setShowCancel(true);
+                  }}
+                />
+              </View>
+            ) : null}
+          </View>
         </View>
       ) : null}
+
+      <ThuTienSheet
+        visible={showThu}
+        conNo={calcConNo(phieu)}
+        submitting={thuMut.isPending}
+        errorMessage={thuMut.isError ? apiErrorMessage(thuMut.error) : null}
+        onDismiss={() => {
+          setShowThu(false);
+          thuMut.reset();
+        }}
+        onSubmit={(input) => thuMut.mutate(input)}
+      />
 
       <CancelSheet
         visible={showCancel}
